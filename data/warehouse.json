@@ -1,0 +1,67 @@
+{
+  "grid": {
+    "width": 16,
+    "height": 12
+  },
+  "distribution_station": {
+    "id": "DS-01",
+    "name": "Main Distribution Station",
+    "x": 0,
+    "y": 0,
+    "facing": "SOUTH"
+  },
+  "robot_initial": {
+    "id": "ROBOT-ALPHA",
+    "name": "Warehouse Bot 01",
+    "x": 0,
+    "y": 1,
+    "facing": "SOUTH",
+    "max_capacity_kg": 25.0
+  },
+  "racks": [
+    {"id": "R01", "name": "Electronics Rack A1", "x": 2, "y": 2, "pickup_position": {"x": 2, "y": 1}, "zone": "ELECTRONICS", "max_capacity": 50},
+    {"id": "R02", "name": "Electronics Rack A2", "x": 3, "y": 2, "pickup_position": {"x": 3, "y": 1}, "zone": "ELECTRONICS", "max_capacity": 50},
+    {"id": "R03", "name": "Electronics Rack A3", "x": 4, "y": 2, "pickup_position": {"x": 4, "y": 1}, "zone": "ELECTRONICS", "max_capacity": 50},
+    {"id": "R04", "name": "Electronics Rack B1", "x": 2, "y": 3, "pickup_position": {"x": 2, "y": 4}, "zone": "ELECTRONICS", "max_capacity": 50},
+    {"id": "R05", "name": "Electronics Rack B2", "x": 3, "y": 3, "pickup_position": {"x": 3, "y": 4}, "zone": "ELECTRONICS", "max_capacity": 50},
+    {"id": "R06", "name": "Electronics Rack B3", "x": 4, "y": 3, "pickup_position": {"x": 4, "y": 4}, "zone": "ELECTRONICS", "max_capacity": 50},
+
+    {"id": "R07", "name": "Accessories Rack A1", "x": 7, "y": 2, "pickup_position": {"x": 7, "y": 1}, "zone": "ACCESSORIES", "max_capacity": 50},
+    {"id": "R08", "name": "Accessories Rack A2", "x": 8, "y": 2, "pickup_position": {"x": 8, "y": 1}, "zone": "ACCESSORIES", "max_capacity": 50},
+    {"id": "R09", "name": "Accessories Rack A3", "x": 9, "y": 2, "pickup_position": {"x": 9, "y": 1}, "zone": "ACCESSORIES", "max_capacity": 50},
+    {"id": "R10", "name": "Accessories Rack B1", "x": 7, "y": 3, "pickup_position": {"x": 7, "y": 4}, "zone": "ACCESSORIES", "max_capacity": 50},
+    {"id": "R11", "name": "Accessories Rack B2", "x": 8, "y": 3, "pickup_position": {"x": 8, "y": 4}, "zone": "ACCESSORIES", "max_capacity": 50},
+    {"id": "R12", "name": "Accessories Rack B3", "x": 9, "y": 3, "pickup_position": {"x": 9, "y": 4}, "zone": "ACCESSORIES", "max_capacity": 50},
+
+    {"id": "R13", "name": "Hardware Rack A1", "x": 12, "y": 2, "pickup_position": {"x": 12, "y": 1}, "zone": "HARDWARE", "max_capacity": 50},
+    {"id": "R14", "name": "Hardware Rack A2", "x": 13, "y": 2, "pickup_position": {"x": 13, "y": 1}, "zone": "HARDWARE", "max_capacity": 50},
+    {"id": "R15", "name": "Hardware Rack A3", "x": 14, "y": 2, "pickup_position": {"x": 14, "y": 1}, "zone": "HARDWARE", "max_capacity": 50},
+    {"id": "R16", "name": "Hardware Rack B1", "x": 12, "y": 3, "pickup_position": {"x": 12, "y": 4}, "zone": "HARDWARE", "max_capacity": 50},
+    {"id": "R17", "name": "Hardware Rack B2", "x": 13, "y": 3, "pickup_position": {"x": 13, "y": 4}, "zone": "HARDWARE", "max_capacity": 50},
+    {"id": "R18", "name": "Hardware Rack B3", "x": 14, "y": 3, "pickup_position": {"x": 14, "y": 4}, "zone": "HARDWARE", "max_capacity": 50},
+
+    {"id": "R19", "name": "Peripherals Rack A1", "x": 2, "y": 6, "pickup_position": {"x": 2, "y": 5}, "zone": "PERIPHERALS", "max_capacity": 50},
+    {"id": "R20", "name": "Peripherals Rack A2", "x": 3, "y": 6, "pickup_position": {"x": 3, "y": 5}, "zone": "PERIPHERALS", "max_capacity": 50},
+    {"id": "R21", "name": "Peripherals Rack A3", "x": 4, "y": 6, "pickup_position": {"x": 4, "y": 5}, "zone": "PERIPHERALS", "max_capacity": 50},
+    {"id": "R22", "name": "Peripherals Rack B1", "x": 2, "y": 7, "pickup_position": {"x": 2, "y": 8}, "zone": "PERIPHERALS", "max_capacity": 50},
+    {"id": "R23", "name": "Peripherals Rack B2", "x": 3, "y": 7, "pickup_position": {"x": 3, "y": 8}, "zone": "PERIPHERALS", "max_capacity": 50},
+    {"id": "R24", "name": "Peripherals Rack B3", "x": 4, "y": 7, "pickup_position": {"x": 4, "y": 8}, "zone": "PERIPHERALS", "max_capacity": 50},
+
+    {"id": "R25", "name": "Stationery Rack A1", "x": 7, "y": 6, "pickup_position": {"x": 7, "y": 5}, "zone": "STATIONERY", "max_capacity": 50},
+    {"id": "R26", "name": "Stationery Rack A2", "x": 8, "y": 6, "pickup_position": {"x": 8, "y": 5}, "zone": "STATIONERY", "max_capacity": 50},
+    {"id": "R27", "name": "Stationery Rack A3", "x": 9, "y": 6, "pickup_position": {"x": 9, "y": 5}, "zone": "STATIONERY", "max_capacity": 50},
+    {"id": "R28", "name": "Stationery Rack B1", "x": 7, "y": 7, "pickup_position": {"x": 7, "y": 8}, "zone": "STATIONERY", "max_capacity": 50},
+    {"id": "R29", "name": "Stationery Rack B2", "x": 8, "y": 7, "pickup_position": {"x": 8, "y": 8}, "zone": "STATIONERY", "max_capacity": 50},
+    {"id": "R30", "name": "Stationery Rack B3", "x": 9, "y": 7, "pickup_position": {"x": 9, "y": 8}, "zone": "STATIONERY", "max_capacity": 50}
+  ],
+  "fixed_obstacles": [
+    {"id": "OBS-01", "name": "Structural Pillar 1", "x": 5, "y": 5},
+    {"id": "OBS-02", "name": "Structural Pillar 2", "x": 11, "y": 5},
+    {"id": "OBS-03", "name": "Structural Pillar 3", "x": 5, "y": 9},
+    {"id": "OBS-04", "name": "Structural Pillar 4", "x": 11, "y": 9}
+  ],
+  "restricted_zones": [
+    {"id": "RZ-01", "name": "High Voltage Maintenance Bay", "x": 15, "y": 10, "reason": "Authorized personnel only"},
+    {"id": "RZ-02", "name": "High Voltage Maintenance Bay", "x": 15, "y": 11, "reason": "Authorized personnel only"}
+  ]
+}

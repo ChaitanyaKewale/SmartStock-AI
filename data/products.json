@@ -1,0 +1,29 @@
+[
+  {"id": "PROD-001", "name": "UltraBook Pro 15", "category": "ELECTRONICS", "unit_weight_kg": 1.8, "shelf_id": "R01", "initial_stock": 25, "active": true},
+  {"id": "PROD-002", "name": "4K Gaming Monitor 27", "category": "ELECTRONICS", "unit_weight_kg": 4.5, "shelf_id": "R02", "initial_stock": 15, "active": true},
+  {"id": "PROD-003", "name": "Noise-Cancelling Headphones", "category": "ELECTRONICS", "unit_weight_kg": 0.35, "shelf_id": "R03", "initial_stock": 40, "active": true},
+  {"id": "PROD-004", "name": "Wireless Mechanical Keyboard", "category": "ELECTRONICS", "unit_weight_kg": 0.85, "shelf_id": "R04", "initial_stock": 35, "active": true},
+  {"id": "PROD-005", "name": "Precision Ergonomic Mouse", "category": "ELECTRONICS", "unit_weight_kg": 0.12, "shelf_id": "R05", "initial_stock": 50, "active": true},
+  {"id": "PROD-006", "name": "Thunderbolt 4 Docking Station", "category": "ELECTRONICS", "unit_weight_kg": 0.65, "shelf_id": "R06", "initial_stock": 20, "active": true},
+
+  {"id": "PROD-007", "name": "USB-C Fast Charging Cable 2m", "category": "ACCESSORIES", "unit_weight_kg": 0.08, "shelf_id": "R07", "initial_stock": 80, "active": true},
+  {"id": "PROD-008", "name": "65W GaN Wall Charger", "category": "ACCESSORIES", "unit_weight_kg": 0.15, "shelf_id": "R08", "initial_stock": 60, "active": true},
+  {"id": "PROD-009", "name": "Magnetic Laptop Stand", "category": "ACCESSORIES", "unit_weight_kg": 0.75, "shelf_id": "R09", "initial_stock": 30, "active": true},
+  {"id": "PROD-010", "name": "Webcam Privacy Cover (3-Pack)", "category": "ACCESSORIES", "unit_weight_kg": 0.02, "shelf_id": "R10", "initial_stock": 100, "active": true},
+  {"id": "PROD-011", "name": "Microfiber Screen Cleaners", "category": "ACCESSORIES", "unit_weight_kg": 0.05, "shelf_id": "R11", "initial_stock": 75, "active": true},
+  {"id": "PROD-012", "name": "Hard Drive Protective Sleeve", "category": "ACCESSORIES", "unit_weight_kg": 0.18, "shelf_id": "R12", "initial_stock": 45, "active": true},
+
+  {"id": "PROD-013", "name": "2TB NVMe PCIe 4.0 SSD", "category": "HARDWARE", "unit_weight_kg": 0.04, "shelf_id": "R13", "initial_stock": 40, "active": true},
+  {"id": "PROD-014", "name": "32GB DDR5 6000MHz RAM Kit", "category": "HARDWARE", "unit_weight_kg": 0.09, "shelf_id": "R14", "initial_stock": 35, "active": true},
+  {"id": "PROD-015", "name": "High-Flow Thermal Paste 5g", "category": "HARDWARE", "unit_weight_kg": 0.03, "shelf_id": "R15", "initial_stock": 65, "active": true},
+  {"id": "PROD-016", "name": "120mm PWM Silent Fan", "category": "HARDWARE", "unit_weight_kg": 0.22, "shelf_id": "R16", "initial_stock": 50, "active": true},
+  {"id": "PROD-017", "name": "750W Modular Gold Power Supply", "category": "HARDWARE", "unit_weight_kg": 2.1, "shelf_id": "R17", "initial_stock": 18, "active": true},
+  {"id": "PROD-018", "name": "PCIe WiFi 6E Bluetooth Card", "category": "HARDWARE", "unit_weight_kg": 0.11, "shelf_id": "R18", "initial_stock": 28, "active": true},
+
+  {"id": "PROD-019", "name": "Studio USB Condenser Microphone", "category": "PERIPHERALS", "unit_weight_kg": 0.85, "shelf_id": "R19", "initial_stock": 25, "active": true},
+  {"id": "PROD-020", "name": "1080p 60FPS Streaming Webcam", "category": "PERIPHERALS", "unit_weight_kg": 0.28, "shelf_id": "R20", "initial_stock": 30, "active": true},
+  {"id": "PROD-021", "name": "XL Anti-Fray Desk Mat", "category": "PERIPHERALS", "unit_weight_kg": 0.45, "shelf_id": "R21", "initial_stock": 40, "active": true},
+  {"id": "PROD-022", "name": "Dual Monitor Desk Mount Arm", "category": "PERIPHERALS", "unit_weight_kg": 3.8, "shelf_id": "R22", "initial_stock": 12, "active": true},
+  {"id": "PROD-023", "name": "Stereo Desktop Soundbar", "category": "PERIPHERALS", "unit_weight_kg": 1.2, "shelf_id": "R23", "initial_stock": 20, "active": true},
+  {"id": "PROD-024", "name": "Smart Screen Light Bar", "category": "PERIPHERALS", "unit_weight_kg": 0.52, "shelf_id": "R24", "initial_stock": 30, "active": true}
+]
