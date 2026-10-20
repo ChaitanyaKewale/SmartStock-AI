@@ -129,6 +129,28 @@ def test_reject_collection_beyond_capacity(fulfillment_env: OrderFulfillmentMana
     assert "capacity" in msg.lower()
 
 
+def test_reject_collection_at_wrong_position(fulfillment_env: OrderFulfillmentManager):
+    """Verify pickup is strictly rejected when robot is not at the shelf's designated pickup position."""
+    mgr = fulfillment_env
+    ok, _, oid = mgr.validate_and_create_order([("PROD-001", 1)], order_id="ORD-WRONG-POS")
+    assert ok is True
+    mgr.plan_order_mission()
+
+    # Robot is at Home (0, 1), shelf R01 pickup bay is at (2, 1)
+    assert (mgr.robot.position.x, mgr.robot.position.y) == (0, 1)
+
+    # Force plan index to the COLLECT_PRODUCT action (index 1) while robot is still at (0, 1)
+    mgr.current_plan_index = 1
+    assert mgr.high_level_plan[mgr.current_plan_index].action_type == "COLLECT_PRODUCT"
+
+    step_ok, step_msg, is_done = mgr.execute_next_step()
+    assert step_ok is False
+    assert "rejected" in step_msg.lower()
+    # Confirm item was not picked
+    assert mgr.robot.current_load_kg == 0.0
+    assert mgr.inv_repo.get_stock("PROD-001").on_hand == 25
+
+
 def test_reject_delivery_with_missing_items(fulfillment_env: OrderFulfillmentManager):
     """Verify delivery confirmation cannot succeed if cargo is incomplete."""
     mgr = fulfillment_env

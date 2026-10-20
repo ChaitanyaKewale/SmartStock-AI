@@ -227,6 +227,7 @@ st.markdown("""
 
 from database.db import get_db_connection, init_db, seed_catalog_if_empty
 from database.repositories import OrderRepository
+from simulation.fulfillment import OrderFulfillmentManager
 
 # 3. Initialize Authoritative SimulationEngine and SQLite in Session State
 if "engine" not in st.session_state:
@@ -253,6 +254,15 @@ if "interrupted_orders" not in st.session_state:
 engine: SimulationEngine = st.session_state.engine
 warehouse: WarehouseGrid = engine.warehouse
 robot = engine.robot
+
+# Initialize Fulfillment Manager in Session State
+if "fulfillment" not in st.session_state:
+    st.session_state.fulfillment = OrderFulfillmentManager(engine)
+fulfillment: OrderFulfillmentManager = st.session_state.fulfillment
+
+# Cart state for multi-product orders
+if "cart" not in st.session_state:
+    st.session_state.cart = []
 
 # 4. Top Header Bar
 robot_status_color = "#34d399" if robot.state != RobotState.PAUSED else "#fbbf24"
@@ -562,16 +572,6 @@ with main_col:
 
     st.markdown("</div></div>", unsafe_allow_html=True)
 
-from simulation.fulfillment import OrderFulfillmentManager
-
-# Initialize Fulfillment Manager in Session State
-if "fulfillment" not in st.session_state:
-    st.session_state.fulfillment = OrderFulfillmentManager(engine)
-fulfillment: OrderFulfillmentManager = st.session_state.fulfillment
-
-# Cart state for multi-product orders
-if "cart" not in st.session_state:
-    st.session_state.cart = []
 
 with side_col:
     # Order Dispatch Panel
