@@ -225,7 +225,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. Initialize Authoritative SimulationEngine in Session State
+from database.db import get_db_connection, init_db, seed_catalog_if_empty
+from database.repositories import OrderRepository
+
+# 3. Initialize Authoritative SimulationEngine and SQLite in Session State
 if "engine" not in st.session_state:
     try:
         st.session_state.engine = SimulationEngine()
@@ -235,6 +238,17 @@ if "engine" not in st.session_state:
     except Exception as exc:
         st.error(f"Engine Initialization Error: {exc}")
         st.stop()
+
+# Startup SQLite recovery check (run once per session)
+if "interrupted_orders" not in st.session_state:
+    try:
+        db_conn = get_db_connection()
+        init_db(db_conn)
+        seed_catalog_if_empty(db_conn)
+        order_repo = OrderRepository(db_conn)
+        st.session_state.interrupted_orders = order_repo.flag_interrupted_orders()
+    except Exception as db_err:
+        st.session_state.interrupted_orders = []
 
 engine: SimulationEngine = st.session_state.engine
 warehouse: WarehouseGrid = engine.warehouse
@@ -254,6 +268,14 @@ st.markdown(f"""
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+# Interrupted order recovery alert banner
+if st.session_state.get("interrupted_orders"):
+    orders_str = ", ".join(st.session_state.interrupted_orders)
+    st.warning(
+        f"⚠️ Startup Recovery Notice: Order(s) {orders_str} were active when the application was last stopped. "
+        "Flagged as RECOVERY_REQUIRED. Reconciliation is required before re-executing."
+    )
 
 # 5. Compact KPI Row
 col_k1, col_k2, col_k3, col_k4 = st.columns(4)

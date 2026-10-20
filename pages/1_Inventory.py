@@ -1,7 +1,13 @@
-"""Inventory page for SmartStock AI."""
+"""Inventory page for SmartStock AI.
+
+Connected to SQLite persistence: displays real on-hand, reserved, and available stock.
+"""
+
+from __future__ import annotations
 
 import streamlit as st
-from utils.config import load_products_config, ConfigurationError
+from database.db import get_db_connection, init_db, seed_catalog_if_empty
+from database.repositories import InventoryRepository
 
 st.set_page_config(page_title="Inventory | SmartStock AI", layout="wide", page_icon="📦")
 
@@ -24,32 +30,52 @@ st.markdown("""
 st.markdown("""
 <div class="header-box">
     <h3 style="margin: 0; color: #f3f4f6; font-size: 18px; font-weight: 600;">INVENTORY MANAGEMENT</h3>
-    <div style="color: #9ca3af; font-size: 12px; margin-top: 4px;">Warehouse SKU catalog, shelf allocations, and real-time stock levels</div>
+    <div style="color: #9ca3af; font-size: 12px; margin-top: 4px;">Live SQLite Inventory: On-Hand, Reserved, and Available Stock Levels</div>
 </div>
 """, unsafe_allow_html=True)
 
 try:
-    products = load_products_config()
-    st.info(f"Catalog loaded: {len(products)} products registered.")
-    
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total SKUs", len(products))
-    col2.metric("Active SKUs", sum(1 for p in products if p.active))
-    col3.metric("Total Initial Units", sum(p.initial_stock for p in products))
+    conn = get_db_connection()
+    init_db(conn)
+    seed_catalog_if_empty(conn)
+    inv_repo = InventoryRepository(conn)
+
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT p.id, p.name, p.category, p.unit_weight_kg, p.shelf_id, p.active,
+               i.on_hand, i.reserved, (i.on_hand - i.reserved) as available
+        FROM products p
+        JOIN inventory i ON p.id = i.product_id
+        ORDER BY p.id;
+    """)
+    records = cursor.fetchall()
+
+    total_skus = len(records)
+    total_on_hand = sum(r["on_hand"] for r in records)
+    total_reserved = sum(r["reserved"] for r in records)
+    total_available = sum(r["available"] for r in records)
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Registered SKUs", total_skus)
+    col2.metric("Total On-Hand", total_on_hand)
+    col3.metric("Total Reserved", total_reserved)
+    col4.metric("Total Available", total_available)
 
     table_data = [
         {
-            "SKU ID": p.id,
-            "Product Name": p.name,
-            "Category": p.category,
-            "Shelf": p.shelf_id,
-            "Unit Weight (kg)": p.unit_weight_kg,
-            "Stock": p.initial_stock,
-            "Status": "ACTIVE" if p.active else "INACTIVE"
+            "SKU ID": r["id"],
+            "Product Name": r["name"],
+            "Category": r["category"],
+            "Shelf": r["shelf_id"],
+            "Weight (kg)": r["unit_weight_kg"],
+            "On-Hand": r["on_hand"],
+            "Reserved": r["reserved"],
+            "Available": r["available"],
+            "Status": "ACTIVE" if r["active"] else "INACTIVE"
         }
-        for p in products
+        for r in records
     ]
     st.dataframe(table_data, use_container_width=True)
 
-except ConfigurationError as err:
-    st.error(f"Configuration notice: {err}")
+except Exception as err:
+    st.error(f"Inventory database notice: {err}")

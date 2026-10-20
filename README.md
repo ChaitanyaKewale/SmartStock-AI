@@ -102,5 +102,16 @@ pytest -v
   - Interactive testbeds deployed in `pages/2_AI_Laboratory.py`.
   - 51 comprehensive unit tests passed (100% pass rate).
 
+- **Phase 5: SQLite Persistence & Inventory Transactions** — **COMPLETE**
+  - Relational schema (`products`, `inventory`, `orders`, `order_lines`, `inventory_transactions`, `deliveries`, `durable_events`).
+  - Safe catalog seeding without overwriting operational stock on application restarts.
+  - Transactional stock reservations with rollback on shortages and invariant `0 <= reserved <= on_hand`.
+  - Collection pick transactions converting reservations into picked payload and decrementing shelf on-hand.
+  - Order cancellation releasing remaining reservations and reconciling picked cargo back to shelves.
+  - Exactly-once delivery confirmation and transaction idempotency keys.
+  - Startup recovery detector flagging in-flight interrupted orders as `RECOVERY_REQUIRED`.
+  - 59 comprehensive unit tests passed.
+
+
 
 
