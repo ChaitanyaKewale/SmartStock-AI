@@ -282,6 +282,9 @@ class OrderFulfillmentManager:
         if not self.active_order_id:
             return False, "No active order to execute.", False
 
+        if self.robot.state == RobotState.PAUSED:
+            return False, "Execution halted: Robot operations are currently PAUSED.", False
+
         if self.current_plan_index >= len(self.high_level_plan):
             # All actions completed
             return True, "All planned actions already completed.", True
