@@ -18,17 +18,19 @@ from __future__ import annotations
 import html
 from typing import Optional, Set, Tuple
 from simulation.warehouse import WarehouseGrid
-from simulation.models import Position, RobotDirection
+from simulation.models import Position, RobotDirection, Robot
 
 
 def render_warehouse_svg(
     grid: WarehouseGrid,
+    robot: Optional[Robot] = None,
     selected_shelf_id: Optional[str] = None,
     hover_cell: Optional[Tuple[int, int]] = None,
     planned_route: Optional[list[Position]] = None,
     traversed_route: Optional[list[Position]] = None
 ) -> str:
     """Generate clean, scalable, standalone SVG markup for the warehouse grid."""
+    active_robot = robot or grid.robot_initial
     cell_size = 46
     margin_left = 32
     margin_top = 28
@@ -198,10 +200,9 @@ def render_warehouse_svg(
         )
 
     # 5. Render Robot Unit
-    robot = grid.robot_initial
-    rx = margin_left + robot.position.x * cell_size + cell_size / 2
-    ry = margin_top + robot.position.y * cell_size + cell_size / 2
-    rot = robot.facing.rotation_degrees
+    rx = margin_left + active_robot.position.x * cell_size + cell_size / 2
+    ry = margin_top + active_robot.position.y * cell_size + cell_size / 2
+    rot = active_robot.facing.rotation_degrees
 
     svg_parts.append(f"""
     <g transform="translate({rx}, {ry}) rotate({rot})">

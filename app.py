@@ -1,7 +1,7 @@
 """SmartStock AI - Warehouse Operations Dashboard
 
-Phase 2: Authoritative Warehouse Domain Model, Interactive SVG Map,
-Shelf Inspection Engine, and Layout Editing Mode.
+Phase 3: Robot Model, Explicit State Machine, Event System,
+and Action Executor with Step-by-Step Movement Controls.
 """
 
 from __future__ import annotations
@@ -9,7 +9,9 @@ from __future__ import annotations
 import streamlit as st
 from pathlib import Path
 from utils.config import ConfigurationError
-from simulation.warehouse import WarehouseGrid, get_default_warehouse
+from simulation.models import RobotDirection, RobotState, Position
+from simulation.warehouse import WarehouseGrid
+from simulation.engine import SimulationEngine
 from frontend.map_renderer import render_warehouse_svg, render_map_fallback
 
 # 1. Page Configuration
@@ -182,13 +184,23 @@ st.markdown("""
         border: 1px solid rgba(255,255,255,0.2);
     }
 
+    .log-container {
+        background: #080d1a;
+        border: 1px solid #1a2234;
+        border-radius: 4px;
+        padding: 6px;
+        max-height: 220px;
+        overflow-y: auto;
+    }
+
     .log-entry {
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         font-size: 11px;
-        padding: 6px 8px;
-        border-bottom: 1px solid #1a2234;
+        padding: 5px 8px;
+        border-bottom: 1px solid #111a2e;
         display: flex;
-        gap: 12px;
+        align-items: baseline;
+        gap: 10px;
     }
 
     .log-time {
@@ -197,9 +209,13 @@ st.markdown("""
     }
 
     .log-cat {
-        color: var(--accent-blue);
+        font-weight: 700;
+        min-width: 85px;
+    }
+
+    .log-outcome {
         font-weight: 600;
-        min-width: 90px;
+        min-width: 75px;
     }
 
     .log-msg {
@@ -209,20 +225,23 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. Initialize Authoritative Warehouse in Session State
-if "warehouse" not in st.session_state:
+# 3. Initialize Authoritative SimulationEngine in Session State
+if "engine" not in st.session_state:
     try:
-        st.session_state.warehouse = get_default_warehouse()
+        st.session_state.engine = SimulationEngine()
     except ConfigurationError as exc:
         st.error(f"Configuration Initialization Alert: {exc}")
         st.stop()
     except Exception as exc:
-        st.error(f"Warehouse Engine Failure: {exc}")
+        st.error(f"Engine Initialization Error: {exc}")
         st.stop()
 
-warehouse: WarehouseGrid = st.session_state.warehouse
+engine: SimulationEngine = st.session_state.engine
+warehouse: WarehouseGrid = engine.warehouse
+robot = engine.robot
 
 # 4. Top Header Bar
+robot_status_color = "#34d399" if robot.state != RobotState.PAUSED else "#fbbf24"
 st.markdown(f"""
 <div class="header-bar">
     <div>
@@ -230,8 +249,8 @@ st.markdown(f"""
         <span class="brand-sub"> / Warehouse Operations & Fulfillment</span>
     </div>
     <div style="display: flex; align-items: center; gap: 12px;">
-        <span style="font-size: 12px; color: #9ca3af;">Layout: {warehouse.width}×{warehouse.height} Grid</span>
-        <span class="status-badge">MAP ENGINE ACTIVE</span>
+        <span style="font-size: 12px; color: #9ca3af;">Tick: #{engine.tick} | Grid: {warehouse.width}×{warehouse.height}</span>
+        <span class="status-badge" style="color: {robot_status_color};">SIMULATION ENGINE ACTIVE</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -258,22 +277,21 @@ with col_k2:
 with col_k3:
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-label">Configured Shelves</div>
-        <div class="kpi-value">{len(warehouse.racks_by_id)}</div>
+        <div class="kpi-label">Distance Travelled</div>
+        <div class="kpi-value">{robot.distance_travelled} <span style="font-size:12px; font-weight:normal; color:#9ca3af;">cells</span></div>
     </div>
     """, unsafe_allow_html=True)
 
 with col_k4:
-    user_obs_count = len(warehouse.user_added_obstacles)
-    obs_label = f"{len(warehouse.fixed_obstacles)} Fixed" + (f" + {user_obs_count} User" if user_obs_count > 0 else "")
+    status_disp = robot.state.value
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-label">Obstacles</div>
-        <div class="kpi-value" style="font-size: 16px; line-height: 28px; color: #f59e0b;">{obs_label}</div>
+        <div class="kpi-label">Robot State</div>
+        <div class="kpi-value" style="font-size: 16px; line-height: 28px; color: {robot_status_color};">{status_disp}</div>
     </div>
     """, unsafe_allow_html=True)
 
-# 6. Main Dashboard Layout (68% Map/Inspector, 32% Side Controls/Telemetry)
+# 6. Main Dashboard Layout (68% Map/Controls, 32% Side Controls/Telemetry)
 main_col, side_col = st.columns([0.68, 0.32], gap="small")
 
 with main_col:
@@ -282,14 +300,14 @@ with main_col:
     <div class="panel-box" style="padding-bottom: 10px;">
         <div class="panel-title">
             <span>Authoritative Live Warehouse Map (16 × 12 Grid)</span>
-            <span style="color: #10b981; font-size: 11px;">● SVG Vector Renderer</span>
+            <span style="color: #10b981; font-size: 11px;">● Synchronized Simulation State</span>
         </div>
     """, unsafe_allow_html=True)
 
     # Shelf inspection selector
     shelf_ids = sorted(list(warehouse.racks_by_id.keys()))
     inspect_options = ["(None - Overview)"] + [f"{s_id}: {warehouse.racks_by_id[s_id].name}" for s_id in shelf_ids]
-    
+
     col_sel, col_mode = st.columns([0.65, 0.35])
     with col_sel:
         selected_inspect = st.selectbox(
@@ -305,9 +323,14 @@ with main_col:
     if selected_inspect != "(None - Overview)":
         selected_shelf_id = selected_inspect.split(":")[0].strip()
 
-    # Render SVG Map with Fallback
+    # Render SVG Map with Authoritative Robot and Traversed Route
     try:
-        svg_content = render_warehouse_svg(warehouse, selected_shelf_id=selected_shelf_id)
+        svg_content = render_warehouse_svg(
+            warehouse,
+            robot=robot,
+            selected_shelf_id=selected_shelf_id,
+            traversed_route=engine.executor.traversed_path
+        )
         st.markdown(svg_content, unsafe_allow_html=True)
     except Exception as map_err:
         st.warning(f"Map renderer notice: {map_err}. Displaying fallback layout.")
@@ -328,6 +351,64 @@ with main_col:
     </div>
     """, unsafe_allow_html=True)
 
+    # Manual Robot Movement & Simulation Control Pad
+    st.markdown("""
+    <div class="panel-box">
+        <div class="panel-title">Robot Movement & Lifecycle Controls</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    ctrl_col1, ctrl_col2 = st.columns([0.45, 0.55])
+
+    with ctrl_col1:
+        st.caption("Single-Cell Movement Pad:")
+        m_up, m_down, m_left, m_right = st.columns(4)
+        with m_up:
+            if st.button("▲ N", use_container_width=True, help="Step North (y - 1)"):
+                success, msg = engine.move(RobotDirection.NORTH)
+                if not success:
+                    st.toast(msg, icon="⚠️")
+                st.rerun()
+        with m_down:
+            if st.button("▼ S", use_container_width=True, help="Step South (y + 1)"):
+                success, msg = engine.move(RobotDirection.SOUTH)
+                if not success:
+                    st.toast(msg, icon="⚠️")
+                st.rerun()
+        with m_left:
+            if st.button("◀ W", use_container_width=True, help="Step West (x - 1)"):
+                success, msg = engine.move(RobotDirection.WEST)
+                if not success:
+                    st.toast(msg, icon="⚠️")
+                st.rerun()
+        with m_right:
+            if st.button("▶ E", use_container_width=True, help="Step East (x + 1)"):
+                success, msg = engine.move(RobotDirection.EAST)
+                if not success:
+                    st.toast(msg, icon="⚠️")
+                st.rerun()
+
+    with ctrl_col2:
+        st.caption("Simulation State Actions:")
+        a_pause, a_resume, a_reset = st.columns(3)
+        with a_pause:
+            if st.button("⏸ Pause", use_container_width=True):
+                engine.pause()
+                st.rerun()
+        with a_resume:
+            if st.button("▶ Resume", use_container_width=True):
+                engine.resume()
+                st.rerun()
+        with a_reset:
+            confirm_reset = st.checkbox("Confirm Reset", value=False)
+            if st.button("↺ Reset", use_container_width=True, type="secondary"):
+                if not confirm_reset:
+                    st.warning("Please check 'Confirm Reset' first.")
+                else:
+                    engine.reset(confirm=True)
+                    st.success("Simulation reset.")
+                    st.rerun()
+
     # Warehouse Edit Mode Panel
     if show_edit_mode:
         st.markdown("""
@@ -336,61 +417,34 @@ with main_col:
         </div>
         """, unsafe_allow_html=True)
 
-        c_x, c_y, c_act = st.columns([3, 3, 4])
+        c_x, c_y = st.columns(2)
         with c_x:
             edit_x = st.number_input("Coordinate X", min_value=0, max_value=warehouse.width - 1, value=5)
         with c_y:
             edit_y = st.number_input("Coordinate Y", min_value=0, max_value=warehouse.height - 1, value=6)
 
-        # Inspect cell status
-        cell_desc = "Walkable Aisle"
-        if warehouse.is_distribution_station(edit_x, edit_y):
-            cell_desc = "Distribution Station (Impassable for obstacles)"
-        elif warehouse.is_rack(edit_x, edit_y):
-            shelf = warehouse.get_shelf_at(edit_x, edit_y)
-            cell_desc = f"Rack {shelf.id if shelf else ''} (Cannot place obstacle)"
-        elif (edit_x, edit_y) in warehouse.fixed_obstacles:
-            cell_desc = "Fixed Structural Pillar"
-        elif (edit_x, edit_y) in warehouse.user_added_obstacles:
-            cell_desc = "User-Added Barrier (Removable)"
-        elif warehouse.is_restricted(edit_x, edit_y):
-            cell_desc = "Restricted Zone"
-
-        st.caption(f"Cell ({edit_x}, {edit_y}) Current Status: **{cell_desc}**")
-
-        b1, b2, b3, b4 = st.columns(4)
+        b1, b2, b3 = st.columns(3)
         with b1:
-            if st.button("Add Obstacle Barrier", use_container_width=True, type="secondary"):
+            if st.button("Add Obstacle Barrier", use_container_width=True):
                 can_add, reason = warehouse.can_place_obstacle(edit_x, edit_y)
                 if can_add:
                     warehouse.add_obstacle(edit_x, edit_y)
-                    st.success(f"Added obstacle barrier at ({edit_x}, {edit_y}).")
+                    st.success(f"Added barrier at ({edit_x}, {edit_y}).")
                     st.rerun()
                 else:
-                    st.error(f"Cannot place obstacle: {reason}")
-
+                    st.error(f"Placement rejected: {reason}")
         with b2:
             if st.button("Remove Barrier", use_container_width=True):
                 if warehouse.remove_obstacle(edit_x, edit_y):
-                    st.success(f"Removed barrier from ({edit_x}, {edit_y}).")
+                    st.success(f"Removed barrier at ({edit_x}, {edit_y}).")
                     st.rerun()
                 else:
-                    st.warning(f"No user-added barrier exists at ({edit_x}, {edit_y}). Fixed pillars cannot be removed.")
-
+                    st.warning(f"No removable barrier at ({edit_x}, {edit_y}).")
         with b3:
-            if st.button("Discard All Edits", use_container_width=True):
+            if st.button("Discard Edits", use_container_width=True):
                 warehouse.discard_edits()
-                st.info("Discarded user layout modifications. Restored to default.")
+                st.info("Layout restored to default.")
                 st.rerun()
-
-        with b4:
-            if st.button("Save Layout to JSON", use_container_width=True):
-                save_path = Path(__file__).resolve().parent / "data" / "warehouse.json"
-                try:
-                    warehouse.save_layout_to_file(save_path)
-                    st.success("Layout successfully persisted to data/warehouse.json.")
-                except Exception as save_err:
-                    st.error(f"Failed to persist layout: {save_err}")
 
     # Shelf Inspection Details Card
     if selected_shelf_id and selected_shelf_id in warehouse.racks_by_id:
@@ -412,7 +466,6 @@ with main_col:
         """, unsafe_allow_html=True)
 
         if shelf_products:
-            st.markdown("<div style='font-size: 12px; color: #9ca3af; margin-bottom: 6px;'>Configured Products on this Shelf:</div>", unsafe_allow_html=True)
             prod_table = [
                 {
                     "SKU": p.id,
@@ -425,8 +478,6 @@ with main_col:
                 for p in shelf_products
             ]
             st.dataframe(prod_table, use_container_width=True, height=120)
-        else:
-            st.info("No products configured on this shelf location.")
         st.markdown("</div>", unsafe_allow_html=True)
 
     # Order Lifecycle Progress Indicator
@@ -444,27 +495,47 @@ with main_col:
     </div>
     """, unsafe_allow_html=True)
 
-    # Live AI Decision Log Panel
-    st.markdown("""
+    # Live AI Decision Log Panel (Consumes engine.events)
+    recent_events = engine.events.get_recent(limit=15)
+    st.markdown(f"""
     <div class="panel-box">
         <div class="panel-title">
             <span>Live AI Decision Log</span>
-            <span style="color: #64748b; font-size: 11px;">Authoritative Event Feed</span>
+            <span style="color: #64748b; font-size: 11px;">Total Events: {len(engine.events.events)}</span>
         </div>
-        <div style="background: #080d1a; border-radius: 4px; padding: 4px 8px; min-height: 120px;">
-            <div class="log-entry">
-                <span class="log-time">00:00:00</span>
-                <span class="log-cat">SYSTEM</span>
-                <span class="log-msg">SmartStock AI system initialized. Authoritative WarehouseGrid active.</span>
-            </div>
-            <div class="log-entry">
-                <span class="log-time">00:00:00</span>
-                <span class="log-cat">MAP</span>
-                <span class="log-msg">16x12 vector SVG grid rendered. All 30 pickup bays verified walkable.</span>
-            </div>
-        </div>
-    </div>
+        <div class="log-container">
     """, unsafe_allow_html=True)
+
+    category_colors = {
+        "SYSTEM": "#38bdf8",
+        "NAVIGATION": "#10b981",
+        "ACTION": "#a78bfa",
+        "ROBOT": "#f59e0b",
+        "ORDER": "#ec4899",
+        "ERROR": "#ef4444"
+    }
+
+    outcome_colors = {
+        "SUCCESS": "#34d399",
+        "BLOCKED": "#f59e0b",
+        "REJECTED": "#f87171",
+        "FAILED": "#ef4444",
+        "INFO": "#94a3b8"
+    }
+
+    for ev in recent_events:
+        c_color = category_colors.get(ev.category, "#94a3b8")
+        o_color = outcome_colors.get(ev.outcome, "#94a3b8")
+        st.markdown(f"""
+        <div class="log-entry">
+            <span class="log-time">[{ev.timestamp}]</span>
+            <span class="log-cat" style="color: {c_color};">#{ev.event_id} {ev.category}</span>
+            <span class="log-outcome" style="color: {o_color};">[{ev.outcome}]</span>
+            <span class="log-msg">{ev.explanation}</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
 with side_col:
     # Order Dispatch Panel
@@ -477,14 +548,14 @@ with side_col:
     with st.container():
         active_products = [p for p in warehouse.products_by_id.values() if p.active]
         options = {f"{p.name} ({p.id})": p for p in active_products}
-        
+
         selected_label = st.selectbox(
             "Select Product",
             options=list(options.keys()),
             help="Choose an active product from warehouse catalog"
         )
         selected_prod = options.get(selected_label)
-        
+
         col_qty, col_stock = st.columns(2)
         with col_qty:
             qty = st.number_input("Quantity", min_value=1, max_value=10, value=1)
@@ -496,8 +567,7 @@ with side_col:
         if btn_create:
             st.info("Order submission will be processed through the validation engine in Phase 6.")
 
-    # Robot Telemetry Panel
-    robot = warehouse.robot_initial
+    # Live Robot Telemetry Panel
     st.markdown(f"""
     <div class="panel-box" style="margin-top: 14px;">
         <div class="panel-title">Robot Telemetry</div>
@@ -507,7 +577,7 @@ with side_col:
         </div>
         <div class="telemetry-row">
             <span class="telemetry-label">Status</span>
-            <span class="telemetry-val" style="color: #10b981;">{robot.state.value}</span>
+            <span class="telemetry-val" style="color: {robot_status_color};">{robot.state.value}</span>
         </div>
         <div class="telemetry-row">
             <span class="telemetry-label">Position</span>
@@ -518,8 +588,16 @@ with side_col:
             <span class="telemetry-val">{robot.facing.value}</span>
         </div>
         <div class="telemetry-row">
-            <span class="telemetry-label">Payload Capacity</span>
-            <span class="telemetry-val">{robot.current_load_kg:.1f} / {robot.max_capacity_kg:.1f} kg</span>
+            <span class="telemetry-label">Payload</span>
+            <span class="telemetry-val">{robot.current_load_kg:.2f} / {robot.max_capacity_kg:.1f} kg</span>
+        </div>
+        <div class="telemetry-row">
+            <span class="telemetry-label">Carried SKUs</span>
+            <span class="telemetry-val">{sum(robot.carried_items.values())} items</span>
+        </div>
+        <div class="telemetry-row">
+            <span class="telemetry-label">Distance Travelled</span>
+            <span class="telemetry-val">{robot.distance_travelled} cells</span>
         </div>
         <div class="telemetry-row">
             <span class="telemetry-label">Active Target</span>

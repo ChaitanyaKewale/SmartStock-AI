@@ -83,3 +83,13 @@ pytest -v
   - Warehouse layout edit mode with obstacle validation, dynamic barriers, save, and discard.
   - 19 comprehensive unit tests passed.
 
+- **Phase 3: Robot Model, State Machine & Event System** — **COMPLETE**
+  - Explicit finite state machines for `RobotState` and `OrderState` with transition validation.
+  - Authoritative `SimulationEngine` coordinating simulation ticks and state.
+  - Validated `ActionExecutor` supporting cell-by-cell moves, boundary collision rejection, and rack/obstacle collision avoidance.
+  - Structured `EventManager` logging monotonic, chronological events for the AI decision feed.
+  - Operational controls: step movement pad, pause, resume, and confirmation-protected reset.
+  - Streamlit rerun idempotency protection using action deduplication tokens.
+  - 32 comprehensive unit tests passed.
+
+
