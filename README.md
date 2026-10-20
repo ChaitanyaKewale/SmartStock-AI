@@ -73,4 +73,13 @@ pytest -v
   - Dark industrial control-room visual layout created.
   - Pydantic schema validation for layout and catalog.
   - Multi-page navigation (Inventory, AI Laboratory, Analytics).
-  - All 8 unit tests passed.
+  - All 8 Phase 1 unit tests passed.
+
+- **Phase 2: Domain Models, Configuration & Warehouse Map** — **COMPLETE**
+  - Typed domain models (`Position`, `ShelfLocation`, `Obstacle`, `Robot`, `Order`, `SimulationEvent`).
+  - Authoritative 16×12 `WarehouseGrid` query engine (walkability, 4-directional neighbours, spatial invariants).
+  - High-precision vector SVG warehouse map with coordinate markers, shelf IDs, and fallback.
+  - Interactive shelf inspection with SKU catalog listings and pickup target highlights.
+  - Warehouse layout edit mode with obstacle validation, dynamic barriers, save, and discard.
+  - 19 comprehensive unit tests passed.
+
