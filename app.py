@@ -277,22 +277,25 @@ if st.session_state.get("interrupted_orders"):
         "Flagged as RECOVERY_REQUIRED. Reconciliation is required before re-executing."
     )
 
-# 5. Compact KPI Row
+# 5. Compact KPI Row (Live Persistence Data)
+completed_orders_list = fulfillment.order_repo.get_completed_orders()
+active_count = 1 if fulfillment.active_order_id else 0
+
 col_k1, col_k2, col_k3, col_k4 = st.columns(4)
 
 with col_k1:
-    st.markdown("""
+    st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-label">Orders Today</div>
-        <div class="kpi-value">0</div>
+        <div class="kpi-label">Completed Orders</div>
+        <div class="kpi-value">{len(completed_orders_list)}</div>
     </div>
     """, unsafe_allow_html=True)
 
 with col_k2:
-    st.markdown("""
+    st.markdown(f"""
     <div class="kpi-card">
         <div class="kpi-label">Active Orders</div>
-        <div class="kpi-value">0</div>
+        <div class="kpi-value" style="color: {'#38bdf8' if active_count > 0 else '#f3f4f6'};">{active_count}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -559,11 +562,22 @@ with main_col:
 
     st.markdown("</div></div>", unsafe_allow_html=True)
 
+from simulation.fulfillment import OrderFulfillmentManager
+
+# Initialize Fulfillment Manager in Session State
+if "fulfillment" not in st.session_state:
+    st.session_state.fulfillment = OrderFulfillmentManager(engine)
+fulfillment: OrderFulfillmentManager = st.session_state.fulfillment
+
+# Cart state for multi-product orders
+if "cart" not in st.session_state:
+    st.session_state.cart = []
+
 with side_col:
     # Order Dispatch Panel
     st.markdown("""
     <div class="panel-box">
-        <div class="panel-title">Create Order</div>
+        <div class="panel-title">Order Fulfillment Control</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -572,7 +586,7 @@ with side_col:
         options = {f"{p.name} ({p.id})": p for p in active_products}
 
         selected_label = st.selectbox(
-            "Select Product",
+            "Select Product to Add",
             options=list(options.keys()),
             help="Choose an active product from warehouse catalog"
         )
@@ -582,12 +596,86 @@ with side_col:
         with col_qty:
             qty = st.number_input("Quantity", min_value=1, max_value=10, value=1)
         with col_stock:
-            available_stock = selected_prod.initial_stock if selected_prod else 0
-            st.metric("In Stock", available_stock)
+            rec = fulfillment.inv_repo.get_stock(selected_prod.id) if selected_prod else None
+            available_stock = rec.available if rec else 0
+            st.metric("Available", available_stock)
 
-        btn_create = st.button("Validate & Create Order", use_container_width=True, type="primary")
+        # Cart management
+        c_add, c_clear = st.columns(2)
+        with c_add:
+            if st.button("+ Add to Order", use_container_width=True):
+                if selected_prod:
+                    st.session_state.cart.append((selected_prod.id, qty, selected_prod.name, selected_prod.unit_weight_kg))
+                    st.rerun()
+        with c_clear:
+            if st.button("Clear Cart", use_container_width=True):
+                st.session_state.cart.clear()
+                st.rerun()
+
+        # Display current cart
+        if st.session_state.cart:
+            st.caption(f"Cart: {len(st.session_state.cart)} item(s)")
+            cart_display = [
+                {"SKU": item[0], "Product": item[2], "Qty": item[1], "Weight (kg)": f"{item[3]*item[1]:.2f}"}
+                for item in st.session_state.cart
+            ]
+            st.dataframe(cart_display, use_container_width=True, height=100)
+
+        # Order creation button
+        btn_create = st.button("1. Validate & Reserve Order", use_container_width=True, type="primary")
         if btn_create:
-            st.info("Order submission will be processed through the validation engine in Phase 6.")
+            if not st.session_state.cart:
+                # Default to selected product if cart is empty
+                items_to_submit = [(selected_prod.id, qty)] if selected_prod else []
+            else:
+                items_to_submit = [(item[0], item[1]) for item in st.session_state.cart]
+
+            ok, msg, oid = fulfillment.validate_and_create_order(items_to_submit)
+            if ok:
+                st.session_state.cart.clear()
+                st.success(msg)
+                st.rerun()
+            else:
+                st.error(msg)
+
+        # Mission planning & execution buttons if active order exists
+        if fulfillment.active_order_id:
+            st.markdown(f"**Active Order:** `{fulfillment.active_order_id}`")
+            col_pl1, col_pl2 = st.columns(2)
+            with col_pl1:
+                if st.button("2. Plan Mission", use_container_width=True):
+                    p_ok, p_msg = fulfillment.plan_order_mission()
+                    if p_ok:
+                        st.success(p_msg)
+                        st.rerun()
+                    else:
+                        st.error(p_msg)
+
+            with col_pl2:
+                if st.button("Cancel & Restock", use_container_width=True):
+                    c_ok, c_msg = fulfillment.cancel_active_order()
+                    if c_ok:
+                        st.info(c_msg)
+                        st.rerun()
+
+            col_ex1, col_ex2 = st.columns(2)
+            with col_ex1:
+                if st.button("Step Next Action", use_container_width=True):
+                    s_ok, s_msg, is_done = fulfillment.execute_next_step()
+                    if s_ok:
+                        st.toast(s_msg, icon="✅")
+                    else:
+                        st.toast(s_msg, icon="⚠️")
+                    st.rerun()
+
+            with col_ex2:
+                if st.button("▶ Run Full Mission", use_container_width=True, type="secondary"):
+                    report = fulfillment.run_full_mission()
+                    if report.status == "DELIVERED":
+                        st.success(f"Order {report.order_id} DELIVERED! ({report.items_delivered} items, {report.steps_travelled} steps)")
+                    else:
+                        st.warning(f"Mission halted with status {report.status}")
+                    st.rerun()
 
     # Live Robot Telemetry Panel
     st.markdown(f"""
@@ -622,8 +710,8 @@ with side_col:
             <span class="telemetry-val">{robot.distance_travelled} cells</span>
         </div>
         <div class="telemetry-row">
-            <span class="telemetry-label">Active Target</span>
-            <span class="telemetry-val">NONE</span>
+            <span class="telemetry-label">Active Order</span>
+            <span class="telemetry-val">{fulfillment.active_order_id or "NONE"}</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
