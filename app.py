@@ -479,28 +479,47 @@ with main_col:
         with c_y:
             edit_y = st.number_input("Coordinate Y", min_value=0, max_value=warehouse.height - 1, value=6)
 
-        b1, b2, b3 = st.columns(3)
-        with b1:
-            if st.button("Add Obstacle Barrier", use_container_width=True):
-                can_add, reason = warehouse.can_place_obstacle(edit_x, edit_y)
-                if can_add:
-                    warehouse.add_obstacle(edit_x, edit_y)
-                    st.success(f"Added barrier at ({edit_x}, {edit_y}).")
+        is_executing = robot.state in (
+            RobotState.NAVIGATING_TO_PICKUP,
+            RobotState.NAVIGATING_TO_DISTRIBUTION,
+            RobotState.PICKING,
+            RobotState.UNLOADING
+        )
+
+        if is_executing:
+            st.warning("⚠️ Full layout editing is locked while a mission is actively executing. Use the '⚠️ Inject Barrier' button in Mission Controls to test dynamic runtime obstacle avoidance.")
+        else:
+            b1, b2, b3, b4 = st.columns(4)
+            with b1:
+                if st.button("Add Barrier", use_container_width=True):
+                    can_add, reason = warehouse.can_place_obstacle(edit_x, edit_y)
+                    if can_add:
+                        warehouse.add_obstacle(edit_x, edit_y)
+                        st.success(f"Added barrier at ({edit_x}, {edit_y}).")
+                        st.rerun()
+                    else:
+                        st.error(f"Placement rejected: {reason}")
+            with b2:
+                if st.button("Remove Barrier", use_container_width=True):
+                    if warehouse.remove_obstacle(edit_x, edit_y):
+                        st.success(f"Removed barrier at ({edit_x}, {edit_y}).")
+                        st.rerun()
+                    else:
+                        st.warning(f"No removable barrier at ({edit_x}, {edit_y}).")
+            with b3:
+                if st.button("Discard Edits", use_container_width=True):
+                    warehouse.discard_edits()
+                    st.info("Layout restored to initial configuration.")
                     st.rerun()
-                else:
-                    st.error(f"Placement rejected: {reason}")
-        with b2:
-            if st.button("Remove Barrier", use_container_width=True):
-                if warehouse.remove_obstacle(edit_x, edit_y):
-                    st.success(f"Removed barrier at ({edit_x}, {edit_y}).")
-                    st.rerun()
-                else:
-                    st.warning(f"No removable barrier at ({edit_x}, {edit_y}).")
-        with b3:
-            if st.button("Discard Edits", use_container_width=True):
-                warehouse.discard_edits()
-                st.info("Layout restored to default.")
-                st.rerun()
+            with b4:
+                confirm_restore = st.checkbox("Confirm Default", value=False)
+                if st.button("Restore Default", use_container_width=True):
+                    if confirm_restore:
+                        warehouse.discard_edits()
+                        st.info("Layout restored to default.")
+                        st.rerun()
+                    else:
+                        st.warning("Please check 'Confirm Default' first.")
 
     # Shelf Inspection Details Card
     if selected_shelf_id and selected_shelf_id in warehouse.racks_by_id:

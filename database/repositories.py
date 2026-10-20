@@ -267,6 +267,51 @@ class InventoryRepository:
                         (f"RETURN-{order_id}-{p_id}", order_id, p_id, picked, now_ts)
                     )
 
+    def adjust_stock(
+        self,
+        product_id: str,
+        new_on_hand: int,
+        reason: str = "MANUAL_ADJUSTMENT"
+    ) -> bool:
+        """Manually adjust on-hand inventory quantity while strictly maintaining invariants."""
+        if new_on_hand < 0:
+            raise ValueError(f"On-hand stock cannot be negative (got {new_on_hand}).")
+
+        cursor = self.conn.cursor()
+        with self.conn:
+            cursor.execute(
+                "SELECT on_hand, reserved FROM inventory WHERE product_id = ?",
+                (product_id,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                raise ValueError(f"Product {product_id} is not registered in inventory.")
+
+            cur_on_hand = row["on_hand"]
+            reserved = row["reserved"]
+            if new_on_hand < reserved:
+                raise ValueError(
+                    f"Cannot reduce on-hand stock to {new_on_hand}: active reservations are {reserved} units."
+                )
+
+            delta = new_on_hand - cur_on_hand
+            cursor.execute(
+                "UPDATE inventory SET on_hand = ? WHERE product_id = ?",
+                (new_on_hand, product_id)
+            )
+
+            idemp = f"ADJ-{product_id}-{int(datetime.now().timestamp() * 1000)}"
+            cursor.execute(
+                """
+                INSERT INTO inventory_transactions
+                (idempotency_key, order_id, product_id, action_type, delta_on_hand, delta_reserved, timestamp, notes)
+                VALUES (?, NULL, ?, 'ADJUST', ?, 0, ?, ?);
+                """,
+                (idemp, product_id, delta, datetime.now().isoformat(), reason)
+            )
+
+        return True
+
 
 # -----------------------------------------------------------------------------
 # Order Repository
