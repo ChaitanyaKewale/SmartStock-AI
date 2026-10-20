@@ -7,7 +7,9 @@ Renders an authoritative 16x12 vector graphics grid with:
 - Distribution station dock
 - Fixed pillars and user-placed obstacles
 - Restricted hazard zones
-- Robot position and orientation arrow
+- Robot position, orientation arrow, payload badge, and dynamic state styling
+- Distinct planned vs. traversed routes
+- Target destination reticle with pulse marker
 - Selected shelf inspection highlights
 - Comprehensive legend and coordinate markers
 - Safe HTML table fallback
@@ -16,9 +18,9 @@ Renders an authoritative 16x12 vector graphics grid with:
 from __future__ import annotations
 
 import html
-from typing import Optional, Set, Tuple
+from typing import Optional, Set, Tuple, List
 from simulation.warehouse import WarehouseGrid
-from simulation.models import Position, RobotDirection, Robot
+from simulation.models import Position, RobotDirection, Robot, RobotState
 
 
 def render_warehouse_svg(
@@ -26,8 +28,9 @@ def render_warehouse_svg(
     robot: Optional[Robot] = None,
     selected_shelf_id: Optional[str] = None,
     hover_cell: Optional[Tuple[int, int]] = None,
-    planned_route: Optional[list[Position]] = None,
-    traversed_route: Optional[list[Position]] = None
+    planned_route: Optional[List[Position]] = None,
+    traversed_route: Optional[List[Position]] = None,
+    target_pos: Optional[Position] = None
 ) -> str:
     """Generate clean, scalable, standalone SVG markup for the warehouse grid."""
     active_robot = robot or grid.robot_initial
@@ -45,7 +48,7 @@ def render_warehouse_svg(
     selected_shelf = grid.racks_by_id.get(selected_shelf_id) if selected_shelf_id else None
     selected_coord = (selected_shelf.x, selected_shelf.y) if selected_shelf else None
 
-    # Route sets for rendering paths if present
+    # Route sets for cell highlighting
     planned_set = {(p.x, p.y) for p in (planned_route or [])}
     traversed_set = {(p.x, p.y) for p in (traversed_route or [])}
 
@@ -56,7 +59,7 @@ def render_warehouse_svg(
         f'border: 1px solid #1f2937; display: block; margin: 0 auto; user-select: none;">'
     )
 
-    # Definitions: patterns, markers, and filters
+    # Definitions: patterns, markers, and animations
     svg_parts.append("""
     <defs>
       <!-- Hazard stripes for restricted zones -->
@@ -74,6 +77,24 @@ def render_warehouse_svg(
         <line x1="0" y1="0" x2="0" y2="8" stroke="#d97706" stroke-width="3" />
         <line x1="4" y1="0" x2="4" y2="8" stroke="#78350f" stroke-width="5" />
       </pattern>
+      <style>
+        @keyframes pulse-ring {
+          0% { r: 16px; opacity: 0.85; }
+          50% { r: 21px; opacity: 0.25; }
+          100% { r: 16px; opacity: 0.85; }
+        }
+        @keyframes target-ring {
+          0% { r: 10px; opacity: 0.9; }
+          50% { r: 17px; opacity: 0.3; }
+          100% { r: 10px; opacity: 0.9; }
+        }
+        .robot-halo-pulse {
+          animation: pulse-ring 2s infinite ease-in-out;
+        }
+        .target-reticle-pulse {
+          animation: target-ring 1.8s infinite ease-in-out;
+        }
+      </style>
     </defs>
     """)
 
@@ -199,20 +220,120 @@ def render_warehouse_svg(
             f'<circle cx="{p_cx}" cy="{p_cy}" r="7" fill="none" stroke="#38bdf8" stroke-width="2" />'
         )
 
-    # 5. Render Robot Unit
+    # 5. Render Traversed Route Polyline (Solid Emerald Trail)
+    if traversed_route and len(traversed_route) > 1:
+        pts = " ".join(
+            f"{margin_left + p.x * cell_size + cell_size / 2},{margin_top + p.y * cell_size + cell_size / 2}"
+            for p in traversed_route
+        )
+        svg_parts.append(
+            f'<polyline points="{pts}" fill="none" stroke="#10b981" stroke-width="3" '
+            f'stroke-linecap="round" stroke-linejoin="round" opacity="0.8" />'
+        )
+        for p in traversed_route:
+            px = margin_left + p.x * cell_size + cell_size / 2
+            py = margin_top + p.y * cell_size + cell_size / 2
+            svg_parts.append(f'<circle cx="{px}" cy="{py}" r="2.5" fill="#34d399" opacity="0.85" />')
+
+    # 6. Render Planned Route Polyline (Dashed Cyan Trail)
+    if planned_route and len(planned_route) > 0:
+        pts = " ".join(
+            f"{margin_left + p.x * cell_size + cell_size / 2},{margin_top + p.y * cell_size + cell_size / 2}"
+            for p in planned_route
+        )
+        svg_parts.append(
+            f'<polyline points="{pts}" fill="none" stroke="#38bdf8" stroke-width="2.5" '
+            f'stroke-dasharray="5 3" stroke-linecap="round" stroke-linejoin="round" opacity="0.9" />'
+        )
+        for p in planned_route:
+            px = margin_left + p.x * cell_size + cell_size / 2
+            py = margin_top + p.y * cell_size + cell_size / 2
+            svg_parts.append(
+                f'<circle cx="{px}" cy="{py}" r="3" fill="#0369a1" stroke="#38bdf8" stroke-width="1.2" />'
+            )
+
+    # 7. Render Active Target Reticle
+    if target_pos:
+        tcx = margin_left + target_pos.x * cell_size + cell_size / 2
+        tcy = margin_top + target_pos.y * cell_size + cell_size / 2
+        svg_parts.append(f"""
+        <g>
+          <circle cx="{tcx}" cy="{tcy}" r="14" fill="none" stroke="#f43f5e" stroke-width="1.5" class="target-reticle-pulse" />
+          <circle cx="{tcx}" cy="{tcy}" r="5" fill="#f43f5e" />
+          <line x1="{tcx-14}" y1="{tcy}" x2="{tcx+14}" y2="{tcy}" stroke="#f43f5e" stroke-width="1.5" opacity="0.8" />
+          <line x1="{tcx}" y1="{tcy-14}" x2="{tcx}" y2="{tcy+14}" stroke="#f43f5e" stroke-width="1.5" opacity="0.8" />
+          <text x="{tcx}" y="{tcy-17}" fill="#fda4af" font-size="8" font-family="monospace" font-weight="700" text-anchor="middle">TARGET</text>
+        </g>
+        """)
+
+    # 8. Render Dynamic Robot Unit with Action State Styling
     rx = margin_left + active_robot.position.x * cell_size + cell_size / 2
     ry = margin_top + active_robot.position.y * cell_size + cell_size / 2
     rot = active_robot.facing.rotation_degrees
 
+    r_state = getattr(active_robot, "state", RobotState.IDLE)
+    if r_state == RobotState.BLOCKED:
+        halo_color = "#ef4444"
+        body_fill = "#991b1b"
+        body_stroke = "#f87171"
+        pulse_class = "robot-halo-pulse"
+    elif r_state == RobotState.PICKING:
+        halo_color = "#c084fc"
+        body_fill = "#7e22ce"
+        body_stroke = "#e9d5ff"
+        pulse_class = "robot-halo-pulse"
+    elif r_state == RobotState.UNLOADING:
+        halo_color = "#22d3ee"
+        body_fill = "#0e7490"
+        body_stroke = "#67e8f9"
+        pulse_class = "robot-halo-pulse"
+    elif r_state in (RobotState.NAVIGATING_TO_PICKUP, RobotState.NAVIGATING_TO_DISTRIBUTION):
+        halo_color = "#38bdf8"
+        body_fill = "#0284c7"
+        body_stroke = "#93c5fd"
+        pulse_class = ""
+    elif r_state == RobotState.PAUSED:
+        halo_color = "#f59e0b"
+        body_fill = "#b45309"
+        body_stroke = "#fde68a"
+        pulse_class = ""
+    else:
+        halo_color = "#10b981"
+        body_fill = "#047857"
+        body_stroke = "#34d399"
+        pulse_class = ""
+
+    # Payload badge if robot is carrying cargo
+    load_badge = ""
+    if active_robot.current_load_kg > 0:
+        load_badge = (
+            f'<g transform="translate(10, -14)">'
+            f'<rect x="0" y="0" width="22" height="11" rx="2" fill="#0f172a" stroke="#38bdf8" stroke-width="1" />'
+            f'<text x="11" y="8" fill="#38bdf8" font-size="7.5" font-family="monospace" font-weight="700" text-anchor="middle">{active_robot.current_load_kg:.1f}k</text>'
+            f'</g>'
+        )
+
+    # State badge pill
+    state_disp = r_state.value[:7]
+    state_badge = (
+        f'<g transform="translate(0, 19)">'
+        f'<rect x="-18" y="0" width="36" height="9" rx="2" fill="#0f172a" stroke="{halo_color}" stroke-width="1" opacity="0.9" />'
+        f'<text x="0" y="7" fill="{halo_color}" font-size="6" font-family="monospace" font-weight="700" text-anchor="middle">{state_disp}</text>'
+        f'</g>'
+    )
+
     svg_parts.append(f"""
-    <g transform="translate({rx}, {ry}) rotate({rot})">
-      <!-- Robot Outer Halo -->
-      <circle cx="0" cy="0" r="17" fill="none" stroke="#10b981" stroke-width="2" opacity="0.8" />
-      <!-- Chassis Body -->
-      <circle cx="0" cy="0" r="14" fill="#047857" stroke="#34d399" stroke-width="1.5" />
-      <!-- Direction Pointer Arrow (points North by default) -->
-      <polygon points="0,-12 6,-2 -6,-2" fill="#ffffff" />
-      <circle cx="0" cy="3" r="3" fill="#065f46" />
+    <g transform="translate({rx}, {ry})">
+      <!-- State Halo -->
+      <circle cx="0" cy="0" r="17" fill="none" stroke="{halo_color}" stroke-width="2" opacity="0.85" class="{pulse_class}" />
+      <!-- Chassis Body rotated towards orientation -->
+      <g transform="rotate({rot})">
+        <circle cx="0" cy="0" r="14" fill="{body_fill}" stroke="{body_stroke}" stroke-width="1.5" />
+        <polygon points="0,-12 6,-2 -6,-2" fill="#ffffff" />
+        <circle cx="0" cy="3" r="3" fill="#0f172a" />
+      </g>
+      {load_badge}
+      {state_badge}
     </g>
     """)
 

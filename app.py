@@ -6,6 +6,7 @@ and Action Executor with Step-by-Step Movement Controls.
 
 from __future__ import annotations
 
+import time
 import streamlit as st
 from pathlib import Path
 from utils.config import ConfigurationError
@@ -155,6 +156,16 @@ st.markdown("""
 
     .prog-step.active {
         color: var(--accent-green);
+        font-weight: 700;
+    }
+
+    .prog-step.completed {
+        color: var(--accent-blue);
+        font-weight: 600;
+    }
+
+    .prog-step.blocked {
+        color: var(--accent-red);
         font-weight: 700;
     }
 
@@ -358,19 +369,26 @@ with main_col:
     if selected_inspect != "(None - Overview)":
         selected_shelf_id = selected_inspect.split(":")[0].strip()
 
-    # Render SVG Map with Authoritative Robot and Traversed Route
+    # Render SVG Map with Authoritative Robot, Planned Route, Traversed Route, and Target
+    target_pos = fulfillment.current_target_pos
+    planned_route = fulfillment.current_gbfs_route
+    traversed_route = engine.executor.traversed_path
+
+    map_placeholder = st.empty()
     try:
         svg_content = render_warehouse_svg(
             warehouse,
             robot=robot,
             selected_shelf_id=selected_shelf_id,
-            traversed_route=engine.executor.traversed_path
+            planned_route=planned_route,
+            traversed_route=traversed_route,
+            target_pos=target_pos
         )
-        st.markdown(svg_content, unsafe_allow_html=True)
+        map_placeholder.markdown(svg_content, unsafe_allow_html=True)
     except Exception as map_err:
         st.warning(f"Map renderer notice: {map_err}. Displaying fallback layout.")
         fallback_html = render_map_fallback(warehouse)
-        st.markdown(fallback_html, unsafe_allow_html=True)
+        map_placeholder.markdown(fallback_html, unsafe_allow_html=True)
 
     # Map Legend
     st.markdown("""
@@ -382,6 +400,9 @@ with main_col:
         <div class="legend-item"><div class="legend-swatch" style="background:#d97706; border-color:#f59e0b;"></div> User Barrier</div>
         <div class="legend-item"><div class="legend-swatch" style="background:#7f1d1d; border-color:#dc2626;"></div> Restricted Zone</div>
         <div class="legend-item"><div class="legend-swatch" style="background:#047857; border-color:#34d399; border-radius:50%;"></div> Robot Unit</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#172554; border:1px dashed #38bdf8;"></div> Planned Route</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#064e3b; border-color:#10b981;"></div> Traversed Path</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#881337; border-color:#f43f5e;"></div> Target Destination</div>
     </div>
     </div>
     """, unsafe_allow_html=True)
@@ -515,28 +536,69 @@ with main_col:
             st.dataframe(prod_table, use_container_width=True, height=120)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Order Lifecycle Progress Indicator
-    st.markdown("""
+    # Dynamic Order Lifecycle Progress Indicator
+    active_step = 1
+    is_order_blocked = False
+    if fulfillment.active_order_id:
+        order_rec = fulfillment.order_repo.get_order(fulfillment.active_order_id)
+        if order_rec:
+            if order_rec.status == "DELIVERED":
+                active_step = 6
+            elif order_rec.status == "BLOCKED":
+                active_step = 4
+                is_order_blocked = True
+            elif robot.state == RobotState.NAVIGATING_TO_DISTRIBUTION:
+                active_step = 5
+            elif robot.state in (RobotState.NAVIGATING_TO_PICKUP, RobotState.PICKING):
+                active_step = 4
+            elif fulfillment.high_level_plan:
+                active_step = 3
+            else:
+                active_step = 2
+
+    step_labels = ["1. DRAFT", "2. VALIDATED", "3. PLANNING", "4. IN PROGRESS", "5. RETURNING", "6. DELIVERED"]
+    step_elements = []
+    for s_idx, s_lbl in enumerate(step_labels, start=1):
+        if is_order_blocked and s_idx == active_step:
+            step_elements.append(f'<span class="prog-step blocked">{s_lbl} (BLOCKED)</span>')
+        elif s_idx == active_step:
+            step_elements.append(f'<span class="prog-step active">{s_lbl}</span>')
+        elif s_idx < active_step:
+            step_elements.append(f'<span class="prog-step completed">✓ {s_lbl}</span>')
+        else:
+            step_elements.append(f'<span class="prog-step">{s_lbl}</span>')
+
+    st.markdown(f"""
     <div class="panel-box" style="padding: 12px 16px;">
         <div class="panel-title" style="margin-bottom: 8px;">Order Lifecycle Progress</div>
         <div class="progress-bar-shell">
-            <span class="prog-step active">1. DRAFT</span>
-            <span class="prog-step">2. VALIDATED</span>
-            <span class="prog-step">3. PLANNING</span>
-            <span class="prog-step">4. IN PROGRESS</span>
-            <span class="prog-step">5. RETURNING</span>
-            <span class="prog-step">6. DELIVERED</span>
+            {''.join(step_elements)}
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Live AI Decision Log Panel (Consumes engine.events)
-    recent_events = engine.events.get_recent(limit=15)
+    # Live AI Decision Log Panel with Category Filtering
+    col_log_h1, col_log_h2 = st.columns([0.60, 0.40])
+    with col_log_h1:
+        st.markdown("""
+        <div class="panel-title" style="border-bottom:none; margin-bottom:0; padding-bottom:0;">
+            Live AI Decision Log
+        </div>
+        """, unsafe_allow_html=True)
+    with col_log_h2:
+        log_filter = st.selectbox(
+            "Filter Category",
+            options=["ALL", "SYSTEM", "NAVIGATION", "ACTION", "LOGIC", "REFLEX", "ORDER", "ERROR"],
+            index=0,
+            label_visibility="collapsed"
+        )
+
+    recent_events = engine.events.get_recent(limit=20, category=log_filter)
+
     st.markdown(f"""
-    <div class="panel-box">
-        <div class="panel-title">
-            <span>Live AI Decision Log</span>
-            <span style="color: #64748b; font-size: 11px;">Total Events: {len(engine.events.events)}</span>
+    <div class="panel-box" style="margin-top: -6px;">
+        <div style="font-size: 11px; color: #64748b; margin-bottom: 8px;">
+            Showing {len(recent_events)} events (Filter: {log_filter} | Total Recorded: {len(engine.events.events)})
         </div>
         <div class="log-container">
     """, unsafe_allow_html=True)
@@ -546,7 +608,9 @@ with main_col:
         "NAVIGATION": "#10b981",
         "ACTION": "#a78bfa",
         "ROBOT": "#f59e0b",
-        "ORDER": "#ec4899",
+        "LOGIC": "#fbbf24",
+        "REFLEX": "#ec4899",
+        "ORDER": "#60a5fa",
         "ERROR": "#ef4444"
     }
 
@@ -558,19 +622,61 @@ with main_col:
         "INFO": "#94a3b8"
     }
 
-    for ev in recent_events:
-        c_color = category_colors.get(ev.category, "#94a3b8")
-        o_color = outcome_colors.get(ev.outcome, "#94a3b8")
-        st.markdown(f"""
-        <div class="log-entry">
-            <span class="log-time">[{ev.timestamp}]</span>
-            <span class="log-cat" style="color: {c_color};">#{ev.event_id} {ev.category}</span>
-            <span class="log-outcome" style="color: {o_color};">[{ev.outcome}]</span>
-            <span class="log-msg">{ev.explanation}</span>
-        </div>
-        """, unsafe_allow_html=True)
+    if recent_events:
+        for ev in recent_events:
+            c_color = category_colors.get(ev.category, "#94a3b8")
+            o_color = outcome_colors.get(ev.outcome, "#94a3b8")
+            st.markdown(f"""
+            <div class="log-entry">
+                <span class="log-time">[{ev.timestamp}]</span>
+                <span class="log-cat" style="color: {c_color};">#{ev.event_id} {ev.category}</span>
+                <span class="log-outcome" style="color: {o_color};">[{ev.outcome}]</span>
+                <span class="log-msg">{ev.explanation}</span>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.markdown('<div style="color:#64748b; font-size:12px; padding:8px;">No events matching selected filter.</div>', unsafe_allow_html=True)
 
     st.markdown("</div></div>", unsafe_allow_html=True)
+
+    # Deep AI Algorithm Telemetry Expander (Task 7)
+    with st.expander("🔍 Deep AI Algorithm Telemetry & Active State Inspector", expanded=False):
+        tab_fwd, tab_gbfs, tab_reflex = st.tabs(["1. Forward Search Plan", "2. GBFS Path Planning", "3. Reflex Agent Percept"])
+        with tab_fwd:
+            if fulfillment.high_level_plan:
+                st.caption(f"Synthesized Plan: {len(fulfillment.high_level_plan)} actions total. Current index: {fulfillment.current_plan_index}")
+                for idx, act in enumerate(fulfillment.high_level_plan):
+                    is_cur = idx == fulfillment.current_plan_index
+                    prefix = "👉 " if is_cur else "   "
+                    color = "#38bdf8" if is_cur else "#94a3b8"
+                    st.markdown(f"<span style='color:{color}; font-family:monospace;'>{prefix}<strong>[{idx+1}]</strong> {act.action_type} ➔ Target ({act.target_pos.x}, {act.target_pos.y}) | SKU: {act.product_id or '—'} (Qty: {act.quantity})</span>", unsafe_allow_html=True)
+            else:
+                st.info("No active high-level plan. Dispatch an order and click '2. Plan Mission'.")
+
+        with tab_gbfs:
+            if fulfillment.current_gbfs_route:
+                tgt = fulfillment.current_target_pos
+                tgt_str = f"({tgt.x}, {tgt.y})" if tgt else "N/A"
+                st.markdown(f"**Target Cell:** `{tgt_str}` | **Remaining Steps:** `{len(fulfillment.current_gbfs_route)} cells`")
+                route_str = " ➔ ".join(f"({p.x}, {p.y})" for p in fulfillment.current_gbfs_route[:12])
+                if len(fulfillment.current_gbfs_route) > 12:
+                    route_str += f" ... (+{len(fulfillment.current_gbfs_route)-12} more)"
+                st.code(route_str, language="text")
+            else:
+                st.info("No active GBFS navigation route in progress.")
+
+        with tab_reflex:
+            if fulfillment.last_reflex_percept:
+                p = fulfillment.last_reflex_percept
+                r = fulfillment.last_reflex_response
+                st.markdown(f"- **Current Pos:** `({p.current_position.x}, {p.current_position.y})` | **Facing:** `{p.facing.value}`")
+                p_cell_str = f"({p.proposed_next_cell.x}, {p.proposed_next_cell.y})" if p.proposed_next_cell else "None"
+                st.markdown(f"- **Proposed Cell:** `{p_cell_str}` | **Next Cell Blocked:** `{p.is_next_cell_blocked}`")
+                st.markdown(f"- **At Pickup:** `{p.at_pickup_location}` | **Preconditions Valid:** `{p.pickup_preconditions_valid}`")
+                if r:
+                    st.markdown(f"- **Reflex Decision:** `{r.action}` — *{r.reason}*")
+            else:
+                st.info("No live reflex percept captured yet.")
 
 
 with side_col:
@@ -658,6 +764,30 @@ with side_col:
                         st.info(c_msg)
                         st.rerun()
 
+            # Animation Speed & Interactive Mission Controls
+            anim_delay = st.slider(
+                "Animation Speed (delay sec/step)",
+                min_value=0.05,
+                max_value=0.80,
+                value=0.20,
+                step=0.05,
+                help="Controls interval between steps during animated auto-run"
+            )
+
+            # Dynamic Obstacle Insertion Test Scenario (Task 10)
+            if fulfillment.current_gbfs_route:
+                next_cell = fulfillment.current_gbfs_route[0]
+                can_place_blk, _ = warehouse.can_place_obstacle(next_cell.x, next_cell.y)
+                if can_place_blk:
+                    if st.button(
+                        f"⚠️ Inject Barrier at ({next_cell.x}, {next_cell.y})",
+                        use_container_width=True,
+                        help="Places an obstacle right in the robot's immediate path to test Reflex Agent obstacle detection and automatic GBFS replanning"
+                    ):
+                        warehouse.add_obstacle(next_cell.x, next_cell.y)
+                        st.toast(f"Barrier injected at ({next_cell.x}, {next_cell.y})! Next step will trigger Reflex replan.", icon="⚠️")
+                        st.rerun()
+
             col_ex1, col_ex2 = st.columns(2)
             with col_ex1:
                 if st.button("Step Next Action", use_container_width=True):
@@ -669,12 +799,30 @@ with side_col:
                     st.rerun()
 
             with col_ex2:
-                if st.button("▶ Run Full Mission", use_container_width=True, type="secondary"):
-                    report = fulfillment.run_full_mission()
-                    if report.status == "DELIVERED":
-                        st.success(f"Order {report.order_id} DELIVERED! ({report.items_delivered} items, {report.steps_travelled} steps)")
-                    else:
-                        st.warning(f"Mission halted with status {report.status}")
+                if st.button("▶ Auto-Run Animated", use_container_width=True, type="secondary"):
+                    # Step-by-step non-teleporting animation loop
+                    step_max = 120
+                    cur_step = 0
+                    while cur_step < step_max:
+                        cur_step += 1
+                        s_ok, s_msg, is_done = fulfillment.execute_next_step()
+                        # Update live map placeholder
+                        anim_svg = render_warehouse_svg(
+                            warehouse,
+                            robot=robot,
+                            selected_shelf_id=selected_shelf_id,
+                            planned_route=fulfillment.current_gbfs_route,
+                            traversed_route=engine.executor.traversed_path,
+                            target_pos=fulfillment.current_target_pos
+                        )
+                        map_placeholder.markdown(anim_svg, unsafe_allow_html=True)
+                        time.sleep(anim_delay)
+                        if is_done:
+                            st.toast(f"Mission Complete: {s_msg}", icon="🎉")
+                            break
+                        if not s_ok:
+                            st.toast(f"Execution halted: {s_msg}", icon="⚠️")
+                            break
                     st.rerun()
 
     # Live Robot Telemetry Panel

@@ -121,5 +121,14 @@ pytest -v
   - Greedy Best-First Search providing cell-by-cell pathfinding segments.
   - Simple Reflex Agent inspecting percepts before moves, triggering instant halts on obstacles with automatic GBFS replanning.
   - Exactly-once unloading and delivery confirmation committed in SQLite.
-  - Order cancellation reconciling reservations and restocking collected items.
   - 69 comprehensive unit tests passed (100% pass rate).
+
+- **Phase 7: Live Map Animation, AI Decision Log & Interactive Controls** — **COMPLETE**
+  - Enhanced vector SVG warehouse map rendering dynamic planned routes (dashed cyan), traversed routes (solid emerald trail), active target reticle, and robot state styling.
+  - Cell-by-cell non-teleporting smooth playback with interactive execution speed slider (`0.05s` to `0.80s` delay).
+  - Dynamic visual action states on the robot unit (`IDLE`, `MOVING`, `PICKING`, `UNLOADING`, `BLOCKED`, `PAUSED`) with live carried payload badges.
+  - Real-time AI decision log filtering with category selectors (`ALL`, `SYSTEM`, `NAVIGATION`, `ACTION`, `LOGIC`, `REFLEX`, `ORDER`, `ERROR`).
+  - Deep AI Algorithm Telemetry Inspector detailing Forward Search Action Plan, GBFS Path Waypoints, and live Reflex Agent Percept evaluation.
+  - Dynamic runtime obstacle injection scenario testing: immediate Reflex Agent `STOP_AND_REPLAN` obstacle avoidance and automatic detour recalculation.
+  - Safe failure handling and `BLOCKED` status when boxed in without data corruption.
+  - 76 comprehensive unit tests passed across all 7 phases (100% pass rate).

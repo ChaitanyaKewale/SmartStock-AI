@@ -87,6 +87,22 @@ class OrderFulfillmentManager:
         self.current_plan_index: int = 0
         self.current_gbfs_route: List[Position] = []
         self.replans_count: int = 0
+        self.last_reflex_percept: Optional[Percept] = None
+        self.last_reflex_response: Optional[ReflexAction] = None
+
+    @property
+    def current_target_pos(self) -> Optional[Position]:
+        """Return the target position of the current high-level action."""
+        if self.high_level_plan and self.current_plan_index < len(self.high_level_plan):
+            return self.high_level_plan[self.current_plan_index].target_pos
+        return None
+
+    @property
+    def current_action(self) -> Optional[HighLevelAction]:
+        """Return the current high-level action being executed."""
+        if self.high_level_plan and self.current_plan_index < len(self.high_level_plan):
+            return self.high_level_plan[self.current_plan_index]
+        return None
 
     # -------------------------------------------------------------------------
     # 1. Validation & Unification & Acceptance
@@ -318,6 +334,8 @@ class OrderFulfillmentManager:
                 is_next_cell_blocked=is_blocked
             )
             reflex_response = self.reflex_agent.evaluate(percept)
+            self.last_reflex_percept = percept
+            self.last_reflex_response = reflex_response
 
             # Reflex Rule 1: Obstacle Avoidance Trigger
             if reflex_response.action == "STOP_AND_REPLAN":
@@ -393,6 +411,8 @@ class OrderFulfillmentManager:
                 pickup_preconditions_valid=is_at_pickup and within_cap
             )
             reflex_response = self.reflex_agent.evaluate(percept)
+            self.last_reflex_percept = percept
+            self.last_reflex_response = reflex_response
 
             if reflex_response.action == "REJECT_PICKUP":
                 msg = f"Collection rejected by Reflex Agent: {reflex_response.reason}"
@@ -445,6 +465,8 @@ class OrderFulfillmentManager:
                 delivery_preconditions_valid=is_at_station and all_collected
             )
             reflex_response = self.reflex_agent.evaluate(percept)
+            self.last_reflex_percept = percept
+            self.last_reflex_response = reflex_response
 
             if reflex_response.action == "REJECT_DELIVERY":
                 msg = f"Delivery rejected by Reflex Agent: {reflex_response.reason}"
