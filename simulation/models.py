@@ -86,6 +86,10 @@ class Position(BaseModel):
         """Calculate the Manhattan distance between two positions."""
         return abs(self.x - other.x) + abs(self.y - other.y)
 
+    def manhattan_distance(self, other: Position) -> int:
+        """Alias for manhattan_distance_to."""
+        return self.manhattan_distance_to(other)
+
     def is_adjacent_to(self, other: Position) -> bool:
         """Check if another position is 4-directionally adjacent."""
         return self.manhattan_distance_to(other) == 1

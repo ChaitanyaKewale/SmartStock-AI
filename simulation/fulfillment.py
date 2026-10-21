@@ -213,6 +213,17 @@ class OrderFulfillmentManager:
             self.events.log("ORDER", "RESERVATION", "FAILED", msg, order_id=oid)
             return False, msg, None
 
+        # Cleanly reset robot state and path visualization if robot previously delivered an order
+        if self.robot.state == RobotState.COMPLETED:
+            if self.engine.robot_sm.can_transition_to(RobotState.IDLE):
+                self.engine.robot_sm.transition_to(RobotState.IDLE)
+                self.robot.state = RobotState.IDLE
+
+        self.engine.executor.traversed_path = [Position(x=self.robot.position.x, y=self.robot.position.y)]
+        self.high_level_plan = []
+        self.current_plan_index = 0
+        self.current_gbfs_route = []
+
         # Set active fulfillment state
         self.active_order_id = oid
         self.active_order_lines = resolved_lines
@@ -236,10 +247,16 @@ class OrderFulfillmentManager:
         if not self.active_order_id or not self.active_order_lines:
             return False, "Cannot plan mission: No validated active order."
 
+        if self.robot.state == RobotState.COMPLETED:
+            if self.engine.robot_sm.can_transition_to(RobotState.IDLE):
+                self.engine.robot_sm.transition_to(RobotState.IDLE)
+                self.robot.state = RobotState.IDLE
+
         oid = self.active_order_id
         self.order_repo.update_status(oid, "PLANNING")
-        self.engine.robot_sm.transition_to(RobotState.PLANNING)
-        self.robot.state = RobotState.PLANNING
+        if self.engine.robot_sm.can_transition_to(RobotState.PLANNING):
+            self.engine.robot_sm.transition_to(RobotState.PLANNING)
+            self.robot.state = RobotState.PLANNING
 
         order_dict = {line["product_id"]: line["quantity"] for line in self.active_order_lines}
         plan_result = forward_state_space_search(

@@ -77,7 +77,8 @@ ALLOWED_ROBOT_TRANSITIONS: Dict[RobotState, Set[RobotState]] = {
         RobotState.PAUSED
     },
     RobotState.COMPLETED: {
-        RobotState.IDLE
+        RobotState.IDLE,
+        RobotState.PLANNING
     }
 }
 

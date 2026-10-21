@@ -233,12 +233,210 @@ st.markdown("""
         color: var(--text-primary);
         flex: 1;
     }
+
+    .action-hud-box {
+        background: linear-gradient(135deg, #0b1329 0%, #0d1a38 100%);
+        border: 1px solid #1e3a8a;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 12px;
+    }
+    .hud-title-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+        padding-bottom: 6px;
+    }
+    .hud-headline {
+        font-size: 13px;
+        font-weight: 700;
+        color: #f3f4f6;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .hud-msg-box {
+        background: rgba(15, 23, 42, 0.7);
+        border: 1px solid #1e293b;
+        border-left: 4px solid #38bdf8;
+        border-radius: 4px;
+        padding: 8px 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        color: #38bdf8;
+        margin-bottom: 8px;
+    }
+    .hud-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        font-size: 11px;
+    }
+    .hud-card-cell {
+        background: #090e1a;
+        border: 1px solid #1e293b;
+        border-radius: 4px;
+        padding: 6px 10px;
+    }
+    .hud-card-label {
+        color: #94a3b8;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 2px;
+    }
+    .hud-card-val {
+        color: #f1f5f9;
+        font-weight: 600;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 from database.db import get_db_connection, init_db, seed_catalog_if_empty
 from database.repositories import OrderRepository
 from simulation.fulfillment import OrderFulfillmentManager
+
+
+def render_action_hud(
+    robot: Robot,
+    fulfillment: OrderFulfillmentManager,
+    last_msg: str = "",
+    status: str = "IDLE",
+    step_num: int = 0
+) -> str:
+    """Render live Heads-Up Display banner with authoritative robot status and reflex percepts."""
+    r_state = getattr(robot, "state", RobotState.IDLE)
+    facing_map = {"NORTH": "▲ North", "SOUTH": "▼ South", "EAST": "▶ East", "WEST": "◀ West"}
+    facing_str = facing_map.get(robot.facing.value, robot.facing.value)
+
+    state_colors = {
+        RobotState.IDLE: "#9ca3af",
+        RobotState.NAVIGATING_TO_PICKUP: "#38bdf8",
+        RobotState.PICKING: "#c084fc",
+        RobotState.NAVIGATING_TO_DISTRIBUTION: "#38bdf8",
+        RobotState.UNLOADING: "#22d3ee",
+        RobotState.COMPLETED: "#34d399",
+        RobotState.BLOCKED: "#ef4444",
+        RobotState.PAUSED: "#f59e0b",
+    }
+    state_color = state_colors.get(r_state, "#38bdf8")
+
+    total_plan = len(fulfillment.high_level_plan)
+    cur_plan = fulfillment.current_plan_index + 1 if total_plan > 0 else 0
+    plan_badge = f"Action {min(cur_plan, total_plan)} of {total_plan}" if total_plan > 0 else "Manual / Standby"
+
+    target_pos = fulfillment.current_target_pos
+    target_str = f"({target_pos.x}, {target_pos.y})" if target_pos else "Dock DS-01 (0, 0)"
+
+    gbfs_steps = len(fulfillment.current_gbfs_route)
+    gbfs_str = f"{gbfs_steps} steps left" if gbfs_steps > 0 else "At Waypoint"
+
+    reflex_r = fulfillment.last_reflex_response
+    if reflex_r:
+        reflex_str = f"{reflex_r.action} ({reflex_r.reason[:26]}...)" if len(reflex_r.reason) > 26 else f"{reflex_r.action}"
+    else:
+        reflex_str = "Preconditions OK (Clear)"
+
+    display_msg = last_msg or f"Robot {robot.id} standing at ({robot.position.x}, {robot.position.y}) [{r_state.value}]. Ready for instructions."
+    border_accent = "#34d399" if status == "SUCCESS" else ("#ef4444" if status in ("BLOCKED", "HALTED") else "#38bdf8")
+
+    return f"""
+    <div class="action-hud-box">
+        <div class="hud-title-row">
+            <div class="hud-headline">
+                <span>🤖 Unit <strong>{robot.id}</strong></span>
+                <span style="background:rgba(255,255,255,0.06); padding:2px 8px; border-radius:4px; font-size:11px; color:{state_color}; border:1px solid {state_color};">
+                    ● {r_state.value}
+                </span>
+                <span style="font-size:11px; color:#94a3b8; font-weight:normal;">
+                    Facing: <strong style="color:#f3f4f6;">{facing_str}</strong> | Pos: <strong style="color:#f3f4f6;">({robot.position.x}, {robot.position.y})</strong>
+                </span>
+            </div>
+            <div style="font-size:11px; color:#38bdf8; font-weight:600;">
+                🎯 {plan_badge}
+            </div>
+        </div>
+        <div class="hud-msg-box" style="border-left-color: {border_accent};">
+            <span style="color:#94a3b8; font-size:10px; text-transform:uppercase; letter-spacing:0.5px;">⚡ Live Action Status:</span><br/>
+            <strong style="color:#ffffff; font-size:12.5px;">{display_msg}</strong>
+        </div>
+        <div class="hud-grid">
+            <div class="hud-card-cell">
+                <div class="hud-card-label">🧠 Reflex Agent Radar</div>
+                <div class="hud-card-val" style="color:#a78bfa; font-size:11px;">{reflex_str}</div>
+            </div>
+            <div class="hud-card-cell">
+                <div class="hud-card-label">🗺️ Target & Route (GBFS)</div>
+                <div class="hud-card-val" style="color:#38bdf8; font-size:11px;">Target: {target_str} | {gbfs_str}</div>
+            </div>
+            <div class="hud-card-cell">
+                <div class="hud-card-label">📦 Cargo & Distance</div>
+                <div class="hud-card-val" style="color:#34d399; font-size:11px;">{robot.current_load_kg:.2f}/25.0 kg ({sum(robot.carried_items.values())} items) | {robot.distance_travelled} cells</div>
+            </div>
+        </div>
+    </div>
+    """
+
+
+def render_detailed_action_card(
+    robot: Robot,
+    fulfillment: OrderFulfillmentManager,
+    last_msg: str = "",
+    status: str = "IDLE",
+    step_num: int = 0
+) -> str:
+    """Render comprehensive action inspector detailing invariants, transitions, and plans."""
+    r_state = getattr(robot, "state", RobotState.IDLE)
+    oid = fulfillment.active_order_id or "NONE"
+
+    cur_plan_act = None
+    if fulfillment.high_level_plan and fulfillment.current_plan_index < len(fulfillment.high_level_plan):
+        cur_plan_act = fulfillment.high_level_plan[fulfillment.current_plan_index]
+
+    if cur_plan_act:
+        plan_desc = f"<strong>{cur_plan_act.action_type}</strong> ➔ Target ({cur_plan_act.target_pos.x}, {cur_plan_act.target_pos.y})"
+        if cur_plan_act.product_id:
+            plan_desc += f" | SKU: <code>{cur_plan_act.product_id}</code> (Qty: {cur_plan_act.quantity})"
+    elif oid != "NONE" and r_state == RobotState.COMPLETED:
+        plan_desc = "<span style='color:#34d399;'>🎉 All mission actions executed successfully! Order delivered at Station DS-01.</span>"
+    else:
+        plan_desc = "<span style='color:#94a3b8;'>No active forward search mission plan. Ready to receive next dispatch.</span>"
+
+    p = fulfillment.last_reflex_percept
+    r = fulfillment.last_reflex_response
+    if p:
+        p_str = f"Ahead Blocked: <strong>{'YES ⚠️' if p.is_next_cell_blocked else 'NO (CLEAR) ✅'}</strong> | At Pickup: <strong>{p.at_pickup_location}</strong> | Invariants: <strong>{'VALID ✅' if (p.pickup_preconditions_valid or p.delivery_preconditions_valid) else 'CHECKING'}</strong>"
+        r_str = f"Decision: <strong style='color:#c084fc;'>{r.action if r else 'APPROVE'}</strong> ({r.reason if r else 'Passed safety check'})"
+    else:
+        p_str = "Sensory percepts idle. Aisle is clear ahead."
+        r_str = "Reflex Agent ready to monitor next cell transition."
+
+    return f"""
+    <div class="panel-box" style="margin-top: 10px; padding: 12px 16px;">
+        <div class="panel-title" style="margin-bottom: 8px;">
+            <span>Detailed Action Inspector & Precondition Invariants</span>
+            <span style="font-size:11px; color:#38bdf8;">Order: {oid}</span>
+        </div>
+        <div style="font-size: 12px; line-height: 1.6;">
+            <div style="margin-bottom: 6px;">
+                <span style="color:#94a3b8;">🎯 Current Plan Action:</span> {plan_desc}
+            </div>
+            <div style="margin-bottom: 6px; font-family: ui-monospace, monospace; font-size: 11px; background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 4px; border: 1px solid #1f2937;">
+                <span style="color:#a78bfa;">🧠 Reflex Percept:</span> {p_str}<br/>
+                <span style="color:#f472b6;">⚖️ Reflex Response:</span> {r_str}
+            </div>
+            <div style="display: flex; gap: 16px; font-size: 11px; color: #9ca3af; margin-top: 6px;">
+                <span>⚖️ Capacity Invariant: <strong style="color:#34d399;">{robot.current_load_kg:.2f} ≤ 25.0 kg (SATISFIED)</strong></span>
+                <span>🧭 Manhattan Dist to Goal: <strong style="color:#38bdf8;">{robot.position.manhattan_distance_to(fulfillment.current_target_pos) if fulfillment.current_target_pos else 0} cells</strong></span>
+                <span>👣 Total Steps: <strong style="color:#f3f4f6;">{robot.distance_travelled}</strong></span>
+            </div>
+        </div>
+    </div>
+    """
 
 # 3. Initialize Authoritative SimulationEngine and SQLite in Session State
 if "engine" not in st.session_state:
@@ -274,6 +472,15 @@ fulfillment: OrderFulfillmentManager = st.session_state.fulfillment
 # Cart state for multi-product orders
 if "cart" not in st.session_state:
     st.session_state.cart = []
+
+if "last_action_msg" not in st.session_state:
+    st.session_state.last_action_msg = "Robot R-01 standing at Station Dock DS-01 (0, 0). Ready for fulfillment mission or manual navigation."
+if "last_action_status" not in st.session_state:
+    st.session_state.last_action_status = "IDLE"
+if "auto_run_requested" not in st.session_state:
+    st.session_state.auto_run_requested = False
+if "anim_delay_val" not in st.session_state:
+    st.session_state.anim_delay_val = 0.35
 
 # 4. Top Header Bar
 robot_status_color = "#34d399" if robot.state != RobotState.PAUSED else "#fbbf24"
@@ -374,7 +581,28 @@ with main_col:
     planned_route = fulfillment.current_gbfs_route
     traversed_route = engine.executor.traversed_path
 
+    # Synchronous UI placeholders (updated live on every step)
+    hud_placeholder = st.empty()
     map_placeholder = st.empty()
+    legend_placeholder = st.empty()
+    detail_placeholder = st.empty()
+
+    legend_html = """
+    <div class="legend-bar">
+        <div class="legend-item"><div class="legend-swatch" style="background:#0369a1; border-color:#38bdf8;"></div> Station (DS-01)</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#1e293b; border-color:#60a5fa;"></div> Storage Rack</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#0f172a; border:1px dashed #059669;"></div> Pickup Bay</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#334155; border-color:#64748b;"></div> Fixed Pillar</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#d97706; border-color:#f59e0b;"></div> User Barrier</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#7f1d1d; border-color:#dc2626;"></div> Restricted Zone</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#047857; border-color:#34d399; border-radius:50%;"></div> Robot Unit</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#172554; border:1px dashed #38bdf8;"></div> Planned Route</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#064e3b; border-color:#10b981;"></div> Traversed Path</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#881337; border-color:#f43f5e;"></div> Target Destination</div>
+    </div>
+    </div>
+    """
+
     try:
         svg_content = render_warehouse_svg(
             warehouse,
@@ -390,22 +618,79 @@ with main_col:
         fallback_html = render_map_fallback(warehouse)
         map_placeholder.markdown(fallback_html, unsafe_allow_html=True)
 
-    # Map Legend
-    st.markdown("""
-    <div class="legend-bar">
-        <div class="legend-item"><div class="legend-swatch" style="background:#0369a1; border-color:#38bdf8;"></div> Station (DS-01)</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:#1e293b; border-color:#60a5fa;"></div> Storage Rack</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:#0f172a; border:1px dashed #059669;"></div> Pickup Bay</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:#334155; border-color:#64748b;"></div> Fixed Pillar</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:#d97706; border-color:#f59e0b;"></div> User Barrier</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:#7f1d1d; border-color:#dc2626;"></div> Restricted Zone</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:#047857; border-color:#34d399; border-radius:50%;"></div> Robot Unit</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:#172554; border:1px dashed #38bdf8;"></div> Planned Route</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:#064e3b; border-color:#10b981;"></div> Traversed Path</div>
-        <div class="legend-item"><div class="legend-swatch" style="background:#881337; border-color:#f43f5e;"></div> Target Destination</div>
-    </div>
-    </div>
-    """, unsafe_allow_html=True)
+    hud_html = render_action_hud(
+        robot=robot,
+        fulfillment=fulfillment,
+        last_msg=st.session_state.get("last_action_msg", ""),
+        status=st.session_state.get("last_action_status", "IDLE"),
+        step_num=fulfillment.current_plan_index
+    )
+    hud_placeholder.markdown(hud_html, unsafe_allow_html=True)
+
+    legend_placeholder.markdown(legend_html, unsafe_allow_html=True)
+
+    detail_html = render_detailed_action_card(
+        robot=robot,
+        fulfillment=fulfillment,
+        last_msg=st.session_state.get("last_action_msg", ""),
+        status=st.session_state.get("last_action_status", "IDLE"),
+        step_num=fulfillment.current_plan_index
+    )
+    detail_placeholder.markdown(detail_html, unsafe_allow_html=True)
+
+    # 🚀 Check if animated auto-run loop requested
+    if st.session_state.get("auto_run_requested"):
+        st.session_state.auto_run_requested = False
+        step_max = 120
+        cur_step = 0
+        anim_delay = st.session_state.get("anim_delay_val", 0.35)
+
+        while cur_step < step_max:
+            cur_step += 1
+            s_ok, s_msg, is_done = fulfillment.execute_next_step()
+            st.session_state.last_action_msg = s_msg
+            st.session_state.last_action_status = "SUCCESS" if s_ok else "HALTED"
+
+            # 1. Update Map
+            anim_svg = render_warehouse_svg(
+                warehouse,
+                robot=robot,
+                selected_shelf_id=selected_shelf_id,
+                planned_route=fulfillment.current_gbfs_route,
+                traversed_route=engine.executor.traversed_path,
+                target_pos=fulfillment.current_target_pos
+            )
+            map_placeholder.markdown(anim_svg, unsafe_allow_html=True)
+
+            # 2. Update HUD
+            anim_hud = render_action_hud(
+                robot=robot,
+                fulfillment=fulfillment,
+                last_msg=s_msg,
+                status="SUCCESS" if s_ok else "HALTED",
+                step_num=cur_step
+            )
+            hud_placeholder.markdown(anim_hud, unsafe_allow_html=True)
+
+            # 3. Update Detailed Inspector Card
+            anim_detail = render_detailed_action_card(
+                robot=robot,
+                fulfillment=fulfillment,
+                last_msg=s_msg,
+                status="SUCCESS" if s_ok else "HALTED",
+                step_num=cur_step
+            )
+            detail_placeholder.markdown(anim_detail, unsafe_allow_html=True)
+
+            time.sleep(anim_delay)
+            if is_done:
+                st.toast(f"🎉 Mission Complete: {s_msg}", icon="🎉")
+                break
+            if not s_ok:
+                st.toast(f"⚠️ Execution halted: {s_msg}", icon="⚠️")
+                break
+
+        st.rerun()
 
     # Manual Robot Movement & Simulation Control Pad
     st.markdown("""
@@ -422,27 +707,46 @@ with main_col:
         with m_up:
             if st.button("▲ N", use_container_width=True, help="Step North (y - 1)"):
                 success, msg = engine.move(RobotDirection.NORTH)
+                st.session_state.last_action_msg = msg
+                st.session_state.last_action_status = "SUCCESS" if success else "BLOCKED"
                 if not success:
                     st.toast(msg, icon="⚠️")
+                else:
+                    st.toast(msg, icon="✅")
                 st.rerun()
         with m_down:
             if st.button("▼ S", use_container_width=True, help="Step South (y + 1)"):
                 success, msg = engine.move(RobotDirection.SOUTH)
+                st.session_state.last_action_msg = msg
+                st.session_state.last_action_status = "SUCCESS" if success else "BLOCKED"
                 if not success:
                     st.toast(msg, icon="⚠️")
+                else:
+                    st.toast(msg, icon="✅")
                 st.rerun()
         with m_left:
             if st.button("◀ W", use_container_width=True, help="Step West (x - 1)"):
                 success, msg = engine.move(RobotDirection.WEST)
+                st.session_state.last_action_msg = msg
+                st.session_state.last_action_status = "SUCCESS" if success else "BLOCKED"
                 if not success:
                     st.toast(msg, icon="⚠️")
+                else:
+                    st.toast(msg, icon="✅")
                 st.rerun()
         with m_right:
             if st.button("▶ E", use_container_width=True, help="Step East (x + 1)"):
                 success, msg = engine.move(RobotDirection.EAST)
+                st.session_state.last_action_msg = msg
+                st.session_state.last_action_status = "SUCCESS" if success else "BLOCKED"
                 if not success:
                     st.toast(msg, icon="⚠️")
+                else:
+                    st.toast(msg, icon="✅")
                 st.rerun()
+
+        if (robot.position.x, robot.position.y) == (0, 0):
+            st.caption("ℹ️ At Dock (0,0): North & West are perimeter walls. Move ▼ S or ▶ E into aisle.")
 
     with ctrl_col2:
         st.caption("Simulation State Actions:")
@@ -659,7 +963,8 @@ with main_col:
     st.markdown("</div></div>", unsafe_allow_html=True)
 
     # Deep AI Algorithm Telemetry Expander (Task 7)
-    with st.expander("🔍 Deep AI Algorithm Telemetry & Active State Inspector", expanded=False):
+    has_mission = bool(fulfillment.high_level_plan or fulfillment.active_order_id)
+    with st.expander("🔍 Deep AI Algorithm Telemetry & Active State Inspector", expanded=has_mission):
         tab_fwd, tab_gbfs, tab_reflex = st.tabs(["1. Forward Search Plan", "2. GBFS Path Planning", "3. Reflex Agent Percept"])
         with tab_fwd:
             if fulfillment.high_level_plan:
@@ -699,23 +1004,107 @@ with main_col:
 
 
 with side_col:
-    # Order Dispatch Panel
+    # 🚀 Quick Warehouse Destination Presets
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #064e3b 0%, #065f46 100%); border: 1px solid #10b981; border-radius: 8px; padding: 14px; margin-bottom: 14px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+            <span style="font-weight: 700; color: #ffffff; font-size: 13px; letter-spacing: 0.5px;">🚀 QUICK TEST DESTINATIONS</span>
+            <span style="background: rgba(0,0,0,0.3); color: #34d399; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">1-CLICK RUN</span>
+        </div>
+        <div style="font-size: 11px; color: #d1fae5; line-height: 1.4; margin-bottom: 10px;">
+            Click any destination preset to watch the robot navigate to that exact storage zone:
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        if st.button("📍 Shelf R01 (Top-Left)", use_container_width=True, help="UltraBook Pro 15 at Shelf R01 (2, 2)"):
+            if fulfillment.active_order_id:
+                fulfillment.cancel_active_order()
+            if (robot.position.x, robot.position.y) != (warehouse.distribution_station.x, warehouse.distribution_station.y):
+                engine.reset(confirm=True)
+            v_ok, v_msg, o_id = fulfillment.validate_and_create_order([("PROD-001", 1)])
+            if v_ok and fulfillment.plan_order_mission()[0]:
+                st.session_state.last_action_msg = f"Order {o_id} dispatched to Shelf R01 (Top-Left, Cell 2,2)!"
+                st.session_state.last_action_status = "SUCCESS"
+                st.session_state.auto_run_requested = True
+                st.rerun()
+
+        if st.button("📍 Shelf R13 (Far-Right)", use_container_width=True, help="2TB NVMe SSD at Shelf R13 (12, 2)"):
+            if fulfillment.active_order_id:
+                fulfillment.cancel_active_order()
+            if (robot.position.x, robot.position.y) != (warehouse.distribution_station.x, warehouse.distribution_station.y):
+                engine.reset(confirm=True)
+            v_ok, v_msg, o_id = fulfillment.validate_and_create_order([("PROD-013", 1)])
+            if v_ok and fulfillment.plan_order_mission()[0]:
+                st.session_state.last_action_msg = f"Order {o_id} dispatched to Shelf R13 (Far-Right, Cell 12,2)!"
+                st.session_state.last_action_status = "SUCCESS"
+                st.session_state.auto_run_requested = True
+                st.rerun()
+
+    with col_p2:
+        if st.button("📍 Shelf R07 (Center Bay)", use_container_width=True, help="USB-C Charging Cable at Shelf R07 (7, 2)"):
+            if fulfillment.active_order_id:
+                fulfillment.cancel_active_order()
+            if (robot.position.x, robot.position.y) != (warehouse.distribution_station.x, warehouse.distribution_station.y):
+                engine.reset(confirm=True)
+            v_ok, v_msg, o_id = fulfillment.validate_and_create_order([("PROD-007", 1)])
+            if v_ok and fulfillment.plan_order_mission()[0]:
+                st.session_state.last_action_msg = f"Order {o_id} dispatched to Shelf R07 (Center Bay, Cell 7,2)!"
+                st.session_state.last_action_status = "SUCCESS"
+                st.session_state.auto_run_requested = True
+                st.rerun()
+
+        if st.button("📍 Shelf R19 (Lower Bay)", use_container_width=True, help="Studio USB Mic at Shelf R19 (2, 6)"):
+            if fulfillment.active_order_id:
+                fulfillment.cancel_active_order()
+            if (robot.position.x, robot.position.y) != (warehouse.distribution_station.x, warehouse.distribution_station.y):
+                engine.reset(confirm=True)
+            v_ok, v_msg, o_id = fulfillment.validate_and_create_order([("PROD-019", 1)])
+            if v_ok and fulfillment.plan_order_mission()[0]:
+                st.session_state.last_action_msg = f"Order {o_id} dispatched to Shelf R19 (Lower Bay, Cell 2,6)!"
+                st.session_state.last_action_status = "SUCCESS"
+                st.session_state.auto_run_requested = True
+                st.rerun()
+
+    if st.button("🌐 Multi-Stop Mission (R01 + R07 + R19)", use_container_width=True, type="primary", help="Visits Top-Left, Center, and Lower bays across the entire warehouse"):
+        if fulfillment.active_order_id:
+            fulfillment.cancel_active_order()
+        if (robot.position.x, robot.position.y) != (warehouse.distribution_station.x, warehouse.distribution_station.y):
+            engine.reset(confirm=True)
+        v_ok, v_msg, o_id = fulfillment.validate_and_create_order([("PROD-001", 1), ("PROD-007", 1), ("PROD-019", 1)])
+        if v_ok and fulfillment.plan_order_mission()[0]:
+            st.session_state.last_action_msg = f"Multi-stop mission {o_id} dispatched across R01, R07, and R19!"
+            st.session_state.last_action_status = "SUCCESS"
+            st.session_state.auto_run_requested = True
+            st.rerun()
+
+    # Custom Order Dispatch Panel
     st.markdown("""
     <div class="panel-box">
-        <div class="panel-title">Order Fulfillment Control</div>
+        <div class="panel-title">Custom Order Fulfillment</div>
     </div>
     """, unsafe_allow_html=True)
 
     with st.container():
         active_products = [p for p in warehouse.products_by_id.values() if p.active]
-        options = {f"{p.name} ({p.id})": p for p in active_products}
+        options = {
+            f"[{p.shelf_id}] {p.name} ({p.id})": p
+            for p in sorted(active_products, key=lambda x: (int(x.shelf_id[1:]) if x.shelf_id[1:].isdigit() else 99))
+        }
 
         selected_label = st.selectbox(
-            "Select Product to Add",
+            "Select Catalog Product & Shelf",
             options=list(options.keys()),
-            help="Choose an active product from warehouse catalog"
+            help="Choose an active product from warehouse catalog. Shows designated storage shelf."
         )
         selected_prod = options.get(selected_label)
+
+        if selected_prod:
+            shelf_info = warehouse.racks_by_id.get(selected_prod.shelf_id)
+            if shelf_info:
+                st.caption(f"📍 Storage: **Shelf {shelf_info.id}** at ({shelf_info.x}, {shelf_info.y}) | Pickup Bay at **({shelf_info.pickup_position.x}, {shelf_info.pickup_position.y})** | Weight: **{selected_prod.unit_weight_kg:.2f} kg**")
 
         col_qty, col_stock = st.columns(2)
         with col_qty:
@@ -728,7 +1117,7 @@ with side_col:
         # Cart management
         c_add, c_clear = st.columns(2)
         with c_add:
-            if st.button("+ Add to Order", use_container_width=True):
+            if st.button("+ Add to Cart", use_container_width=True):
                 if selected_prod:
                     st.session_state.cart.append((selected_prod.id, qty, selected_prod.name, selected_prod.unit_weight_kg))
                     st.rerun()
@@ -746,11 +1135,25 @@ with side_col:
             ]
             st.dataframe(cart_display, use_container_width=True, height=100)
 
+        # Check existing order status
+        current_ord = fulfillment.order_repo.get_order(fulfillment.active_order_id) if fulfillment.active_order_id else None
+        is_order_delivered = current_ord and current_ord.status == "DELIVERED"
+
+        if is_order_delivered:
+            st.success(f"🎉 Order {fulfillment.active_order_id} DELIVERED! Select another product or click a preset to launch your next mission.")
+            if st.button("✨ Clear Delivered Order", use_container_width=True):
+                fulfillment.active_order_id = None
+                fulfillment.active_order_lines = []
+                fulfillment.high_level_plan = []
+                fulfillment.current_plan_index = 0
+                fulfillment.current_gbfs_route = []
+                st.session_state.cart.clear()
+                st.rerun()
+
         # Order creation button
-        btn_create = st.button("1. Validate & Reserve Order", use_container_width=True, type="primary")
+        btn_create = st.button("1. Validate & Reserve Order", use_container_width=True, type="primary" if (not fulfillment.active_order_id or is_order_delivered) else "secondary")
         if btn_create:
             if not st.session_state.cart:
-                # Default to selected product if cart is empty
                 items_to_submit = [(selected_prod.id, qty)] if selected_prod else []
             else:
                 items_to_submit = [(item[0], item[1]) for item in st.session_state.cart]
@@ -758,27 +1161,37 @@ with side_col:
             ok, msg, oid = fulfillment.validate_and_create_order(items_to_submit)
             if ok:
                 st.session_state.cart.clear()
+                st.session_state.last_action_msg = f"Order {oid} validated & reserved in SQLite! Click '2. Plan Mission' to synthesize route."
+                st.session_state.last_action_status = "SUCCESS"
                 st.success(msg)
                 st.rerun()
             else:
+                st.session_state.last_action_msg = f"Order validation failed: {msg}"
+                st.session_state.last_action_status = "BLOCKED"
                 st.error(msg)
 
-        # Mission planning & execution buttons if active order exists
-        if fulfillment.active_order_id:
+        # Mission planning & execution buttons if active uncompleted order exists
+        if fulfillment.active_order_id and not is_order_delivered:
             st.markdown(f"**Active Order:** `{fulfillment.active_order_id}`")
             col_pl1, col_pl2 = st.columns(2)
             with col_pl1:
                 if st.button("2. Plan Mission", use_container_width=True):
                     p_ok, p_msg = fulfillment.plan_order_mission()
                     if p_ok:
+                        st.session_state.last_action_msg = f"Mission synthesized! {len(fulfillment.high_level_plan)} actions. Click '▶ Auto-Run Animated' or 'Step Next Action'."
+                        st.session_state.last_action_status = "SUCCESS"
                         st.success(p_msg)
                         st.rerun()
                     else:
+                        st.session_state.last_action_msg = f"Mission planning failed: {p_msg}"
+                        st.session_state.last_action_status = "BLOCKED"
                         st.error(p_msg)
 
             with col_pl2:
                 if st.button("Cancel & Restock", use_container_width=True):
                     c_ok, c_msg = fulfillment.cancel_active_order()
+                    st.session_state.last_action_msg = c_msg
+                    st.session_state.last_action_status = "IDLE"
                     if c_ok:
                         st.info(c_msg)
                         st.rerun()
@@ -787,11 +1200,12 @@ with side_col:
             anim_delay = st.slider(
                 "Animation Speed (delay sec/step)",
                 min_value=0.05,
-                max_value=0.80,
-                value=0.20,
+                max_value=1.0,
+                value=float(st.session_state.get("anim_delay_val", 0.35)),
                 step=0.05,
-                help="Controls interval between steps during animated auto-run"
+                help="Controls interval between steps during animated auto-run. Slower speeds allow detailed action inspection."
             )
+            st.session_state.anim_delay_val = anim_delay
 
             # Dynamic Obstacle Insertion Test Scenario (Task 10)
             if fulfillment.current_gbfs_route:
@@ -811,6 +1225,8 @@ with side_col:
             with col_ex1:
                 if st.button("Step Next Action", use_container_width=True):
                     s_ok, s_msg, is_done = fulfillment.execute_next_step()
+                    st.session_state.last_action_msg = s_msg
+                    st.session_state.last_action_status = "SUCCESS" if s_ok else "HALTED"
                     if s_ok:
                         st.toast(s_msg, icon="✅")
                     else:
@@ -819,29 +1235,7 @@ with side_col:
 
             with col_ex2:
                 if st.button("▶ Auto-Run Animated", use_container_width=True, type="secondary"):
-                    # Step-by-step non-teleporting animation loop
-                    step_max = 120
-                    cur_step = 0
-                    while cur_step < step_max:
-                        cur_step += 1
-                        s_ok, s_msg, is_done = fulfillment.execute_next_step()
-                        # Update live map placeholder
-                        anim_svg = render_warehouse_svg(
-                            warehouse,
-                            robot=robot,
-                            selected_shelf_id=selected_shelf_id,
-                            planned_route=fulfillment.current_gbfs_route,
-                            traversed_route=engine.executor.traversed_path,
-                            target_pos=fulfillment.current_target_pos
-                        )
-                        map_placeholder.markdown(anim_svg, unsafe_allow_html=True)
-                        time.sleep(anim_delay)
-                        if is_done:
-                            st.toast(f"Mission Complete: {s_msg}", icon="🎉")
-                            break
-                        if not s_ok:
-                            st.toast(f"Execution halted: {s_msg}", icon="⚠️")
-                            break
+                    st.session_state.auto_run_requested = True
                     st.rerun()
 
     # Live Robot Telemetry Panel

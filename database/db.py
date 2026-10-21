@@ -18,9 +18,9 @@ DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "smartstock.sqlite"
 
 
 def get_db_connection(db_path: Path | str | None = None) -> sqlite3.Connection:
-    """Return a configured sqlite3 connection with row_factory and foreign keys enabled."""
+    """Return a configured sqlite3 connection with row_factory, thread-safety, and foreign keys enabled."""
     path = Path(db_path) if db_path is not None else DEFAULT_DB_PATH
-    conn = sqlite3.connect(str(path))
+    conn = sqlite3.connect(str(path), check_same_thread=False, timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
